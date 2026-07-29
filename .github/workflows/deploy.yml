@@ -61,20 +61,22 @@ jobs:
               DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               DATABASE_PATH=/home/data/stock.db
 
-      - name: Deploy to Azure
+      - name: Deploy to Azure via Kudu API
         run: |
-          for i in 1 2 3; do
-            echo "=== Deploy attempt $i ==="
-            az webapp deploy \
-              --resource-group rg-yuzora_roy_ai \
-              --name stock-platform-roy \
-              --src-path ./deploy.zip \
-              --type zip && echo "Deployment succeeded!" && break
-            rc=$?
-            echo "Attempt $i failed (exit code $rc). Waiting 30s before retry..."
-            sleep 30
-          done
-          if [ $i -eq 3 ]; then
-            echo "All 3 deployment attempts failed."
-            exit 1
-          fi
+          echo "Getting deployment credentials..."
+          az webapp deployment list-publishing-credentials \
+            --name stock-platform-roy \
+            --resource-group rg-yuzora_roy_ai > /tmp/creds.json
+          USER=$(cat /tmp/creds.json | jq -r '.publishingUserName')
+          PASS=$(cat /tmp/creds.json | jq -r '.publishingPassword')
+          
+          SCM_URL="https://stock-platform-roy.scm.azurewebsites.net/api/zipdeploy"
+          echo "Uploading to $SCM_URL (timeout: 600s)..."
+          
+          curl -X POST \
+            --max-time 600 \
+            --connect-timeout 60 \
+            -u "$USER:$PASS" \
+            -H "Content-Type: application/zip" \
+            --data-binary @./deploy.zip \
+            "$SCM_URL"
