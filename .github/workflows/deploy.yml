@@ -63,8 +63,18 @@ jobs:
 
       - name: Deploy to Azure
         run: |
-          az webapp deploy \
-            --resource-group rg-yuzora_roy_ai \
-            --name stock-platform-roy \
-            --src-path ./deploy.zip \
-            --type zip
+          for i in 1 2 3; do
+            echo "=== Deploy attempt $i ==="
+            az webapp deploy \
+              --resource-group rg-yuzora_roy_ai \
+              --name stock-platform-roy \
+              --src-path ./deploy.zip \
+              --type zip && echo "Deployment succeeded!" && break
+            rc=$?
+            echo "Attempt $i failed (exit code $rc). Waiting 30s before retry..."
+            sleep 30
+          done
+          if [ $i -eq 3 ]; then
+            echo "All 3 deployment attempts failed."
+            exit 1
+          fi
