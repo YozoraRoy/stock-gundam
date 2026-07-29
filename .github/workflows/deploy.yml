@@ -58,6 +58,7 @@ jobs:
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               ENABLE_ORYX_BUILD=false \
               WEBSITES_ENABLE_APP_SERVICE_STORAGE=true \
+              DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               DATABASE_PATH=/home/data/stock.db
 
       - name: Deploy to Azure

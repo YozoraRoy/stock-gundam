@@ -1,4 +1,5 @@
-import { getDb } from '../db.js'
+import { getDb, getAzurePoolPublic } from '../db.js'
+import sql from 'mssql'
 
 interface TwseOpenApiOddLotItem {
   Code: string
@@ -13,14 +14,15 @@ interface TwseOpenApiOddLotItem {
   BestAskVolume: string
 }
 
+const isAzureSql = (process.env.DATABASE_URL?.length ?? 0) > 0
+
 export async function fetchTwseOddLots(date?: string): Promise<number> {
   const targetDate = date || formatDate(new Date())
   return fetchForDate(targetDate)
 }
 
 async function fetchForDate(targetDate: string): Promise<number> {
-  // TWSE 官方 OpenAPI 盤後零股交易行情 API
-  const url = `https://openapi.twse.com.tw/v1/exchangeReport/TWT53U`
+  const url = 'https://openapi.twse.com.tw/v1/exchangeReport/TWT53U'
 
   const res = await fetch(url, {
     headers: {
@@ -36,6 +38,13 @@ async function fetchForDate(targetDate: string): Promise<number> {
     return 0
   }
 
+  if (isAzureSql) {
+    return insertAzureSql(items, targetDate)
+  }
+  return insertSqlite(items, targetDate)
+}
+
+function insertSqlite(items: TwseOpenApiOddLotItem[], targetDate: string): number {
   const db = getDb()
   if (!db) return 0
 
@@ -50,23 +59,16 @@ async function fetchForDate(targetDate: string): Promise<number> {
       const stockId = item.Code?.trim()
       if (!stockId) continue
 
-      const unitPrice = parseNum(item.TradePrice)
-      const volume = parseInt(String(item.TradeVolume ?? '0').replace(/,/g, ''), 10) || 0
-      const bidPrice = parseNum(item.BestBidPrice)
-      const bidVolume = parseInt(String(item.BestBidVolume ?? '0').replace(/,/g, ''), 10) || 0
-      const askPrice = parseNum(item.BestAskPrice)
-      const askVolume = parseInt(String(item.BestAskVolume ?? '0').replace(/,/g, ''), 10) || 0
-
       insert.run({
         date: targetDate,
         stock_id: stockId,
         stock_name: item.Name?.trim() || stockId,
-        price: unitPrice,
-        volume: volume,
-        bid_price: bidPrice,
-        bid_volume: bidVolume,
-        ask_price: askPrice,
-        ask_volume: askVolume,
+        price: parseNum(item.TradePrice),
+        volume: parseInt(String(item.TradeVolume ?? '0').replace(/,/g, ''), 10) || 0,
+        bid_price: parseNum(item.BestBidPrice),
+        bid_volume: parseInt(String(item.BestBidVolume ?? '0').replace(/,/g, ''), 10) || 0,
+        ask_price: parseNum(item.BestAskPrice),
+        ask_volume: parseInt(String(item.BestAskVolume ?? '0').replace(/,/g, ''), 10) || 0,
       })
       count++
     }
@@ -74,8 +76,56 @@ async function fetchForDate(targetDate: string): Promise<number> {
   })
 
   const count = transaction()
-  console.log(`TWSE OpenAPI odd lots ${targetDate}: ${count} rows inserted`)
+  console.log(`TWSE OpenAPI odd lots ${targetDate}: ${count} rows inserted (SQLite)`)
   return count
+}
+
+async function insertAzureSql(items: TwseOpenApiOddLotItem[], targetDate: string): Promise<number> {
+  const pool = await getAzurePoolPublic()
+  if (!pool) return 0
+
+  const batchSize = 200
+  let total = 0
+
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize)
+    const req = pool.request()
+    const values: string[] = []
+
+    batch.forEach((item, idx) => {
+      const stockId = item.Code?.trim()
+      if (!stockId) return
+      const p = `p${idx}`
+      values.push(`(@${p}_date, @${p}_sid, @${p}_sname, @${p}_price, @${p}_vol, @${p}_bp, @${p}_bv, @${p}_ap, @${p}_av)`)
+      req.input(`${p}_date`, sql.NVarChar(20), targetDate)
+      req.input(`${p}_sid`, sql.NVarChar(20), stockId)
+      req.input(`${p}_sname`, sql.NVarChar(100), item.Name?.trim() || stockId)
+      req.input(`${p}_price`, sql.Float, parseNum(item.TradePrice))
+      req.input(`${p}_vol`, sql.Int, parseInt(String(item.TradeVolume ?? '0').replace(/,/g, ''), 10) || 0)
+      req.input(`${p}_bp`, sql.Float, parseNum(item.BestBidPrice))
+      req.input(`${p}_bv`, sql.Int, parseInt(String(item.BestBidVolume ?? '0').replace(/,/g, ''), 10) || 0)
+      req.input(`${p}_ap`, sql.Float, parseNum(item.BestAskPrice))
+      req.input(`${p}_av`, sql.Int, parseInt(String(item.BestAskVolume ?? '0').replace(/,/g, ''), 10) || 0)
+    })
+
+    if (values.length === 0) continue
+
+    await req.query(`
+      MERGE INTO odd_lot_trades AS t
+      USING (VALUES ${values.join(',')}) AS s(date, stock_id, stock_name, price, volume, bid_price, bid_volume, ask_price, ask_volume)
+      ON t.date = s.date AND t.stock_id = s.stock_id
+      WHEN MATCHED THEN UPDATE SET
+        stock_name = s.stock_name, price = s.price, volume = s.volume,
+        bid_price = s.bid_price, bid_volume = s.bid_volume,
+        ask_price = s.ask_price, ask_volume = s.ask_volume
+      WHEN NOT MATCHED THEN INSERT (date, stock_id, stock_name, price, volume, bid_price, bid_volume, ask_price, ask_volume)
+        VALUES (s.date, s.stock_id, s.stock_name, s.price, s.volume, s.bid_price, s.bid_volume, s.ask_price, s.ask_volume);
+    `)
+    total += values.length
+  }
+
+  console.log(`TWSE OpenAPI odd lots ${targetDate}: ${total} rows upserted (AzureSQL)`)
+  return total
 }
 
 function parseNum(val: string | undefined): number | null {
@@ -83,12 +133,6 @@ function parseNum(val: string | undefined): number | null {
   const cleaned = String(val).replace(/,/g, '')
   const n = parseFloat(cleaned)
   return isNaN(n) ? null : n
-}
-
-function yesterday(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 1)
-  return formatDate(d)
 }
 
 export function formatDate(d: Date): string {

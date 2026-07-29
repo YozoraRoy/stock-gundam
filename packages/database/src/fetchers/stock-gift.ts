@@ -1,5 +1,6 @@
 import { chromium } from 'playwright'
-import { getDb } from '../db.js'
+import { getDb, getAzurePoolPublic } from '../db.js'
+import sql from 'mssql'
 
 interface GiftRow {
   stock_id: string
@@ -9,6 +10,8 @@ interface GiftRow {
   gift_name: string
   status: string
 }
+
+const isAzureSql = (process.env.DATABASE_URL?.length ?? 0) > 0
 
 export async function fetchStockGift(): Promise<number> {
   const urls = [
@@ -31,16 +34,7 @@ export async function fetchStockGift(): Promise<number> {
     viewport: { width: 1920, height: 1080 },
   })
 
-  const db = getDb()
-  if (!db) return 0
-
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO shareholder_gifts
-      (stock_id, stock_name, meeting_date, last_buy_date, gift_name, distribution_method, distribution_location, source_url)
-    VALUES (@stock_id, @stock_name, @meeting_date, @last_buy_date, @gift_name, @distribution_method, @distribution_location, @source_url)
-  `)
-
-  let total = 0
+  const allRows: (GiftRow & { source_url: string })[] = []
   const seen = new Set<string>()
 
   for (const url of urls) {
@@ -56,18 +50,7 @@ export async function fetchStockGift(): Promise<number> {
         const key = `${row.stock_id}|${row.meeting_date}`
         if (seen.has(key)) continue
         seen.add(key)
-
-        insert.run({
-          stock_id: row.stock_id,
-          stock_name: row.stock_name,
-          meeting_date: row.meeting_date,
-          last_buy_date: row.last_buy_date,
-          gift_name: row.gift_name,
-          distribution_method: row.status,
-          distribution_location: '',
-          source_url: url,
-        })
-        total++
+        allRows.push({ ...row, source_url: url })
       }
 
       console.log(`stock.gift (${url.split('pred=')[1]?.split('&')[0] ?? '?'}): ${rows.length} rows`)
@@ -78,7 +61,69 @@ export async function fetchStockGift(): Promise<number> {
   }
 
   await browser.close()
+
+  const total = isAzureSql ? await insertGiftsAzureSql(allRows) : insertGiftsSqlite(allRows)
   console.log(`stock.gift total: ${total} unique gifts inserted`)
+  return total
+}
+
+function insertGiftsSqlite(rows: (GiftRow & { source_url: string })[]): number {
+  const db = getDb()
+  if (!db) return 0
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO shareholder_gifts
+      (stock_id, stock_name, meeting_date, last_buy_date, gift_name, distribution_method, distribution_location, source_url)
+    VALUES (@stock_id, @stock_name, @meeting_date, @last_buy_date, @gift_name, @distribution_method, @distribution_location, @source_url)
+  `)
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      insert.run({
+        stock_id: row.stock_id,
+        stock_name: row.stock_name,
+        meeting_date: row.meeting_date,
+        last_buy_date: row.last_buy_date,
+        gift_name: row.gift_name,
+        distribution_method: row.status,
+        distribution_location: '',
+        source_url: row.source_url,
+      })
+    }
+    return rows.length
+  })
+  return tx()
+}
+
+async function insertGiftsAzureSql(rows: (GiftRow & { source_url: string })[]): Promise<number> {
+  const pool = await getAzurePoolPublic()
+  if (!pool) return 0
+  const batchSize = 200
+  let total = 0
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize)
+    const req = pool.request()
+    const values: string[] = []
+    batch.forEach((row, idx) => {
+      const p = `g${idx}`
+      values.push(`(@${p}_sid, @${p}_sname, @${p}_md, @${p}_lbd, @${p}_gn, @${p}_dm, @${p}_dl, @${p}_su)`)
+      req.input(`${p}_sid`, sql.NVarChar(20), row.stock_id)
+      req.input(`${p}_sname`, sql.NVarChar(100), row.stock_name)
+      req.input(`${p}_md`, sql.NVarChar(20), row.meeting_date || null)
+      req.input(`${p}_lbd`, sql.NVarChar(20), row.last_buy_date || null)
+      req.input(`${p}_gn`, sql.NVarChar(500), row.gift_name)
+      req.input(`${p}_dm`, sql.NVarChar(200), row.status || null)
+      req.input(`${p}_dl`, sql.NVarChar(500), '')
+      req.input(`${p}_su`, sql.NVarChar(1000), row.source_url)
+    })
+    if (values.length === 0) continue
+    await req.query(`
+      MERGE INTO shareholder_gifts AS t
+      USING (VALUES ${values.join(',')}) AS s(stock_id, stock_name, meeting_date, last_buy_date, gift_name, distribution_method, distribution_location, source_url)
+      ON t.stock_id = s.stock_id AND t.meeting_date = s.meeting_date
+      WHEN NOT MATCHED THEN INSERT (stock_id, stock_name, meeting_date, last_buy_date, gift_name, distribution_method, distribution_location, source_url)
+        VALUES (s.stock_id, s.stock_name, s.meeting_date, s.last_buy_date, s.gift_name, s.distribution_method, s.distribution_location, s.source_url);
+    `)
+    total += values.length
+  }
   return total
 }
 

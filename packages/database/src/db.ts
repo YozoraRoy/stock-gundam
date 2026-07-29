@@ -239,6 +239,10 @@ export function getDb(): Database.Database | null {
 /**
  * Check if we have a working database connection (either backend).
  */
+export function getAzurePoolPublic(): Promise<sql.ConnectionPool | null> {
+  return getAzurePool()
+}
+
 export function hasDb(): boolean {
   if (isAzureSql) return !_poolFailed
   return getSqliteDb() !== null
