@@ -1,0 +1,31 @@
+{
+  "name": "@stock/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit",
+    "seed": "npx tsx seed/index.ts",
+    "seed:odd-lot": "npx tsx seed/fetch-odd-lot.ts",
+    "seed:gifts": "npx tsx seed/fetch-gifts.ts",
+    "migrate": "npx tsx seed/migrate.ts",
+    "scheduler": "npx tsx seed/scheduler.ts"
+  },
+  "dependencies": {
+    "@stock/core": "*",
+    "better-sqlite3": "^12.11.1",
+    "mssql": "^11.0.1",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.61.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/mssql": "^9.0.0",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

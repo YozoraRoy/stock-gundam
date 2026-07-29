@@ -1,0 +1,8 @@
+export { createMarketAnalyst } from './analysts/market.js'
+export { createSentimentAnalyst } from './analysts/sentiment.js'
+export { createNewsAnalyst } from './analysts/news.js'
+export { createFundamentalsAnalyst } from './analysts/fundamentals.js'
+export { createBullResearcher } from './researchers/bull.js'
+export { createResearchManager } from './managers/research.js'
+export { createTrader } from './managers/trader.js'
+export { createPortfolioManager } from './managers/portfolio.js'

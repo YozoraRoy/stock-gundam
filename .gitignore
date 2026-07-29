@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.next/
+.env*
+!.env.example
+*.tsbuildinfo
+.DS_Store
+*.log
+.turbo/
+deploy*.zip
+azure_logs/
+webapp_logs/
+session-*.md
+debug-diag.mjs
+scratch_test.js
+kudu_*.py
+.gitlab-ci.yml

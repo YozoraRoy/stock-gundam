@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-review": {
+      "description": "Reviews merge request diffs",
+      "model": "openrouter/free",
+      "prompt": "You are a senior code reviewer for a TypeScript monorepo. Review the MR diff using 'glab mr diff' and provide feedback on bugs, security, and code quality.",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": true
+      }
+    }
+  }
+}

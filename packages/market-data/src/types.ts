@@ -1,0 +1,53 @@
+import { z } from 'zod'
+import { Market } from '@stock/core'
+
+export const MarketDataRequestSchema = z.object({
+  symbol: z.string(),
+  market: z.nativeEnum(Market),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+})
+
+export const OHLCVSchema = z.object({
+  timestamp: z.number(),
+  open: z.number(),
+  high: z.number(),
+  low: z.number(),
+  close: z.number(),
+  volume: z.number(),
+})
+
+export const QuoteSchema = z.object({
+  symbol: z.string(),
+  price: z.number(),
+  change: z.number(),
+  changePercent: z.number(),
+  volume: z.number(),
+  timestamp: z.number(),
+})
+
+export type OHLCV = z.infer<typeof OHLCVSchema>
+export type MarketDataRequest = z.infer<typeof MarketDataRequestSchema>
+export type Quote = z.infer<typeof QuoteSchema>
+
+export interface Fundamentals {
+  symbol: string
+  marketCap?: number
+  peRatio?: number
+  eps?: number
+  dividendYield?: number
+  revenue?: number
+  netIncome?: number
+  sector?: string
+  industry?: string
+}
+
+export interface CompanyProfile {
+  symbol: string
+  name: string
+  sector?: string
+  industry?: string
+  exchange?: string
+  marketCap?: number
+  description?: string
+}

@@ -1,0 +1,54 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --bg-primary: #0f1118;
+  --bg-secondary: #1a1d2e;
+  --bg-card: #222639;
+  --text-primary: #e8eaf0;
+  --text-secondary: #8b8fa3;
+  --accent: #4f8cff;
+  --accent-green: #34d399;
+  --accent-red: #f87171;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.prose-invert {
+  --tw-prose-body: var(--text-secondary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-code: var(--text-primary);
+  --tw-prose-code-bg: rgba(255,255,255,0.05);
+  --tw-prose-pre-bg: rgba(0,0,0,0.3);
+  --tw-prose-quotes: var(--text-secondary);
+  --tw-prose-bullets: var(--text-secondary);
+  --tw-prose-hr: rgba(255,255,255,0.08);
+  --tw-prose-th-borders: rgba(255,255,255,0.1);
+  --tw-prose-td-borders: rgba(255,255,255,0.06);
+}
+
+.prose-invert code {
+  font-size: 0.8125em;
+  padding: 0.15em 0.35em;
+  border-radius: 0.375rem;
+  background: var(--tw-prose-code-bg);
+}
+
+.prose-invert pre code {
+  background: none;
+  padding: 0;
+}
+
+.prose-invert table {
+  font-size: 0.8125rem;
+}
+
+.prose-invert th {
+  font-weight: 600;
+}

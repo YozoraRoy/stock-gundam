@@ -1,0 +1,34 @@
+{
+  "name": "stock-platform",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "start": "npm run start --workspace=apps/web",
+    "local-build": "npm run build --workspaces",
+    "build": "echo 'Bypassing Cloud Build'",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "seed": "npm run seed --workspace=packages/database",
+    "seed:odd-lot": "npm run seed:odd-lot --workspace=packages/database",
+    "seed:gifts": "npm run seed:gifts --workspace=packages/database",
+    "db:migrate": "npm run migrate --workspace=packages/database",
+    "db:scheduler": "npm run scheduler --workspace=packages/database"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "@tailwindcss/typography": "^0.5.20",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1"
+  }
+}
