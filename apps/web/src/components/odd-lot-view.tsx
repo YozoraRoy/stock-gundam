@@ -18,6 +18,7 @@ import {
   ExternalLink,
   History,
   X,
+  RefreshCw,
 } from 'lucide-react'
 import {
   isTaiwanMarketTradingDay,
@@ -418,6 +419,29 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
   const [onlyAllowAgent, setOnlyAllowAgent] = useState(false) // 僅顯示1股可代領
   const [onlyHighCp, setOnlyHighCp] = useState(false)   // 僅顯示高 CP 值 (回報 > 100%)
   const [hideExpired, setHideExpired] = useState(true)   // 預設隱藏已過最後買進日
+
+  // 手動更新 TWSE 資料狀態
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    setRefreshMsg(null)
+    try {
+      const res = await fetch('/api/odd-lot/refresh', { method: 'POST' })
+      const json = await res.json()
+      if (json.success) {
+        setRefreshMsg({ type: 'success', text: `已更新 ${json.oddLotCount} 筆零股 + ${json.giftCount} 筆紀念品，重新整理頁面...` })
+        setTimeout(() => window.location.reload(), 1200)
+      } else {
+        setRefreshMsg({ type: 'error', text: json.error || '更新失敗' })
+      }
+    } catch (e) {
+      setRefreshMsg({ type: 'error', text: '網路錯誤，請稍後再試' })
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   // 近 5 年股東會紀念品歷史 Modal 狀態
   const [historyModalStock, setHistoryModalStock] = useState<{ stock_id: string; stock_name: string } | null>(null)
@@ -825,7 +849,33 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
               </span>
               <span>📅 隱藏已截止 (預設)</span>
             </button>
+
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer select-none ${
+                refreshing
+                  ? 'bg-blue-500/15 text-blue-300 border-blue-500/30 animate-pulse'
+                  : 'bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/20 hover:text-blue-200'
+              }`}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? '更新中...' : '手動更新'}</span>
+            </button>
           </div>
+
+          {refreshMsg && (
+            <div
+              className={`text-xs px-3 py-1.5 rounded-lg ${
+                refreshMsg.type === 'success'
+                  ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                  : 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+              }`}
+            >
+              {refreshMsg.text}
+            </div>
+          )}
         </div>
 
         {/* 🎁 紀念品分類頁籤 (Filter Pills) */}
