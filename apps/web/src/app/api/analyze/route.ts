@@ -21,7 +21,7 @@ export async function POST(req: Request) {
         const { state, signal } = await engine.analyze(
           symbol,
           date ?? new Date().toISOString().split('T')[0],
-          (step, detail) => send('progress', { step, detail }),
+          (step: string, detail: string) => send('progress', { step, detail }),
         )
 
         const resultPayload = {
