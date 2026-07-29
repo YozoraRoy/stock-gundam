@@ -1,0 +1,69 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all workspaces
+        run: npm run local-build
+
+      - name: Create deployment zip
+        run: |
+          zip -r deploy.zip . \
+            -x '.git/*' \
+            -x '.github/*' \
+            -x '.opencode/*' \
+            -x '*.zip' \
+            -x 'deploy.zip' \
+            -x 'node_modules/.cache/*' \
+            -x 'apps/web/.next/cache/*' \
+            -x 'azure_logs/*' \
+            -x 'webapp_logs/*'
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set environment variables
+        run: |
+          az webapp config appsettings set \
+            --name stock-platform-roy \
+            --resource-group rg-yuzora_roy_ai \
+            --settings \
+              OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+              LLM_PROVIDER=openai \
+              LLM_BACKEND_URL=https://opencode.ai/zen/v1 \
+              DEEP_THINK_MODEL=big-pickle \
+              QUICK_THINK_MODEL=big-pickle \
+              FALLBACK_LLM_PROVIDER=openai \
+              FALLBACK_DEEP_THINK_MODEL=nemotron-3-ultra-free \
+              FALLBACK_QUICK_THINK_MODEL=nemotron-3-ultra-free \
+              LLM_TEMPERATURE=0.7 \
+              NPM_RUN_BUILD=false \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+              ENABLE_ORYX_BUILD=false \
+              WEBSITES_ENABLE_APP_SERVICE_STORAGE=true \
+              DATABASE_PATH=/home/data/stock.db
+
+      - name: Deploy to Azure
+        run: |
+          az webapp deploy \
+            --resource-group rg-yuzora_roy_ai \
+            --name stock-platform-roy \
+            --src-path ./deploy.zip \
+            --type zip
