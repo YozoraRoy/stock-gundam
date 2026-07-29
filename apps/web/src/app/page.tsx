@@ -6,7 +6,7 @@ export default function Home() {
     <div className="max-w-4xl mx-auto px-4 py-16 text-center">
       <div className="flex items-center justify-center gap-3 mb-6">
         <TrendingUp className="w-10 h-10 text-[var(--accent)]" />
-        <h1 className="text-3xl font-bold">Stock Platform</h1>
+        <h1 className="text-3xl font-bold">Stock Gundam</h1>
       </div>
       <p className="text-[var(--text-secondary)] text-lg mb-12 max-w-xl mx-auto">
         AI 驅動的智慧股票分析平台，整合即時市場數據與多智能體分析引擎。

@@ -3,7 +3,7 @@ import './globals.css'
 import { Header } from '@/components/header'
 
 export const metadata: Metadata = {
-  title: 'Stock Platform',
+  title: 'Stock Gundam',
   description: 'AI-powered stock analysis platform',
 }
 
