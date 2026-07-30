@@ -28,6 +28,7 @@ jobs:
             if [ -L "$f" ]; then
               target=$(readlink -f "$f")
               rel=$(python3 -c "import os.path; print(os.path.relpath('$target', '.'))")
+              rm "$f"
               {
                 echo '#!/bin/sh'
                 echo 'basedir=$(dirname "$(echo "$0" | sed -e '\''s,\\,/,g'\'')")'
