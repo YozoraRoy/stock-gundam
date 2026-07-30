@@ -61,7 +61,7 @@ jobs:
               DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               DATABASE_PATH=/home/data/stock.db
 
-      - name: Deploy to Azure via Kudu API
+      - name: Clean old wwwroot and deploy via Kudu API
         run: |
           echo "Getting deployment credentials..."
           az webapp deployment list-publishing-credentials \
@@ -70,13 +70,21 @@ jobs:
           USER=$(cat /tmp/creds.json | jq -r '.publishingUserName')
           PASS=$(cat /tmp/creds.json | jq -r '.publishingPassword')
           
-          SCM_URL="https://stock-platform-roy.scm.azurewebsites.net/api/zipdeploy"
-          echo "Uploading to $SCM_URL (timeout: 600s)..."
+          SCM_URL="https://stock-platform-roy.scm.azurewebsites.net"
           
+          echo "Cleaning old wwwroot..."
+          curl -X POST \
+            --max-time 30 \
+            -u "$USER:$PASS" \
+            -H "Content-Type: application/json" \
+            -d '{"command":"rm -rf /home/site/wwwroot/* /home/site/wwwroot/.[!.]* 2>/dev/null; echo done","dir":"/home/site/wwwroot"}' \
+            "$SCM_URL/api/command"
+          
+          echo "Uploading deploy.zip (timeout: 600s)..."
           curl -X POST \
             --max-time 600 \
             --connect-timeout 60 \
             -u "$USER:$PASS" \
             -H "Content-Type: application/zip" \
             --data-binary @./deploy.zip \
-            "$SCM_URL"
+            "$SCM_URL/api/zipdeploy?clean=true"
