@@ -421,41 +421,51 @@ async function ensureSeedDataAzure(): Promise<number> {
       `)
     }
 
+    _giftsSeeded = true
     console.log('[AzureSQL] Seed data inserted')
   }
 
   if (!_giftsSeeded) {
     console.log(`[AzureSQL] Ensuring ${SEED_GIFTS.length} seed gifts...`)
-    for (let i = 0; i < SEED_GIFTS.length; i += batchSize) {
-      const batch = SEED_GIFTS.slice(i, i + batchSize)
-      const req = pool.request()
-      const values: string[] = []
-      batch.forEach((g, idx) => {
-        const p = `g${idx}`
-        values.push(`(@${p}_sid, @${p}_sname, @${p}_md, @${p}_lbd, @${p}_gn, @${p}_dm, @${p}_dl, @${p}_su)`)
-        req.input(`${p}_sid`, sql.NVarChar(20), g.stock_id)
-        req.input(`${p}_sname`, sql.NVarChar(100), g.stock_name)
-        req.input(`${p}_md`, sql.NVarChar(20), g.meeting_date)
-        req.input(`${p}_lbd`, sql.NVarChar(20), g.last_buy_date)
-        req.input(`${p}_gn`, sql.NVarChar(500), g.gift_name)
-        req.input(`${p}_dm`, sql.NVarChar(200), g.distribution_method)
-        req.input(`${p}_dl`, sql.NVarChar(500), g.distribution_location)
-        req.input(`${p}_su`, sql.NVarChar(1000), g.source_url)
-      })
-      await req.query(`
-        MERGE INTO shareholder_gifts AS target
-        USING (VALUES ${values.join(',')}) AS source (stock_id, stock_name, meeting_date, last_buy_date, gift_name, distribution_method, distribution_location, source_url)
-        ON target.stock_id = source.stock_id AND target.meeting_date = source.meeting_date
-        WHEN MATCHED THEN
-          UPDATE SET stock_name = source.stock_name, last_buy_date = source.last_buy_date,
-                     gift_name = source.gift_name, distribution_method = source.distribution_method,
-                     distribution_location = source.distribution_location, source_url = source.source_url
-        WHEN NOT MATCHED THEN
-          INSERT (stock_id, stock_name, meeting_date, last_buy_date, gift_name, distribution_method, distribution_location, source_url)
-          VALUES (source.stock_id, source.stock_name, source.meeting_date, source.last_buy_date, source.gift_name, source.distribution_method, source.distribution_location, source.source_url);
-      `)
+    try {
+      for (let i = 0; i < SEED_GIFTS.length; i += batchSize) {
+        const batch = SEED_GIFTS.slice(i, i + batchSize)
+        const req = pool.request()
+        const values: string[] = []
+        batch.forEach((g, idx) => {
+          const p = `g${idx}`
+          values.push(`(@${p}_sid, @${p}_sname, @${p}_md, @${p}_lbd, @${p}_gn, @${p}_dm, @${p}_dl, @${p}_su)`)
+          req.input(`${p}_sid`, sql.NVarChar(20), g.stock_id)
+          req.input(`${p}_sname`, sql.NVarChar(100), g.stock_name)
+          req.input(`${p}_md`, sql.NVarChar(20), g.meeting_date)
+          req.input(`${p}_lbd`, sql.NVarChar(20), g.last_buy_date)
+          req.input(`${p}_gn`, sql.NVarChar(500), g.gift_name)
+          req.input(`${p}_dm`, sql.NVarChar(200), g.distribution_method)
+          req.input(`${p}_dl`, sql.NVarChar(500), g.distribution_location)
+          req.input(`${p}_su`, sql.NVarChar(1000), g.source_url)
+        })
+        await req.query(`
+          MERGE INTO shareholder_gifts AS target
+          USING (VALUES ${values.join(',')}) AS source (stock_id, stock_name, meeting_date, last_buy_date, gift_name, distribution_method, distribution_location, source_url)
+          ON target.stock_id = source.stock_id AND target.meeting_date = source.meeting_date
+          WHEN MATCHED THEN
+            UPDATE SET stock_name = source.stock_name, last_buy_date = source.last_buy_date,
+                       gift_name = source.gift_name, distribution_method = source.distribution_method,
+                       distribution_location = source.distribution_location, source_url = source.source_url
+          WHEN NOT MATCHED THEN
+            INSERT (stock_id, stock_name, meeting_date, last_buy_date, gift_name, distribution_method, distribution_location, source_url)
+            VALUES (source.stock_id, source.stock_name, source.meeting_date, source.last_buy_date, source.gift_name, source.distribution_method, source.distribution_location, source.source_url);
+        `)
+      }
+      _giftsSeeded = true
+    } catch (e: any) {
+      if (e.number === 2627) {
+        console.log('[AzureSQL] Gifts already seeded (duplicate key), skipping')
+        _giftsSeeded = true
+      } else {
+        throw e
+      }
     }
-    _giftsSeeded = true
   }
 
   const finalCount = await pool.request().query('SELECT COUNT(*) as cnt FROM odd_lot_trades')

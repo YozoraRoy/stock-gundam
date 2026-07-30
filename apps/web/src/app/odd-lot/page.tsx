@@ -17,7 +17,11 @@ export default async function OddLotPage({
   searchParams: Promise<{ q?: string; stock_id?: string }>
 }) {
   const params = await searchParams
-  await ensureSeedData()
+  try {
+    await ensureSeedData()
+  } catch (e) {
+    console.error('[OddLotPage] ensureSeedData failed:', e)
+  }
 
   let trades: OddLotItem[] = []
   let latestDateStr = ''
