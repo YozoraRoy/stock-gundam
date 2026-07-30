@@ -1,6 +1,8 @@
 import { dbQueryAll, dbQueryFirst, ensureSeedData, hasDb } from '@stock/database'
 import { OddLotView, type OddLotItem } from '@/components/odd-lot-view'
 import { Gift, Sparkles, TrendingUp } from 'lucide-react'
+import { yahooFinanceProvider } from '@stock/market-data'
+import { MarketDataError } from '@stock/core'
 
 import SEEDED_ODD_LOTS from '@/data/seeded-odd-lots.json'
 
@@ -80,6 +82,33 @@ export default async function OddLotPage({
   const displayItems = trades.length > 0 ? trades : FALLBACK_ODD_LOTS
   if (!latestDateStr && displayItems.length > 0) {
     latestDateStr = displayItems[0].date
+  }
+
+  // currentPrice fallback — fetch live price for stocks without odd-lot trade data
+  const itemsNeedingPrice = displayItems.filter(
+    (item) => !item.price || item.price <= 0 || isNaN(item.price)
+  )
+  if (itemsNeedingPrice.length > 0) {
+    const stockIds = [...new Set(itemsNeedingPrice.map((item) => item.stock_id))]
+    await Promise.all(
+      stockIds.map(async (sid) => {
+        try {
+          const quote = await yahooFinanceProvider.getQuote(`${sid}.TW`, 'TW')
+          if (quote?.price && quote.price > 0) {
+            const currentPrice = quote.price
+            displayItems.forEach((item) => {
+              if (item.stock_id === sid) {
+                item.current_price = currentPrice
+              }
+            })
+          }
+        } catch (err) {
+          if (!(err instanceof MarketDataError)) {
+            console.error(`[OddLotPage] Yahoo Finance fetch failed for ${sid}:`, err)
+          }
+        }
+      })
+    )
   }
 
   const holidayInfo = isCurrentlyHolidayOrWeekend()

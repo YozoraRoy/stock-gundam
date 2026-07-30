@@ -41,6 +41,7 @@ export interface OddLotItem {
   meeting_date?: string | null
   last_buy_date?: string | null
   distribution_method?: string | null
+  current_price?: number | null
 }
 
 export type GiftCategory = 'ALL' | 'EGIFT' | 'CARD' | 'KITCHEN' | 'CARE' | 'LIFESTYLE' | 'PENDING' | 'NO_GIFT' | 'OTHER'
@@ -62,10 +63,20 @@ export type SortOrder = 'asc' | 'desc' | 'none'
 export function normalizePriceAndVolume(
   price: number | null | undefined,
   volume: number | null | undefined,
-  stockId?: string
-): { unitPrice: number | null; totalAmount: number | null; volume: number | null } {
+  stockId?: string,
+  currentPrice?: number | null
+): { unitPrice: number | null; totalAmount: number | null; volume: number | null; isEstimated: boolean } {
   if (price == null || isNaN(price) || price <= 0) {
-    return { unitPrice: null, totalAmount: null, volume: volume ?? 0 }
+    if (currentPrice != null && currentPrice > 0) {
+      const vol = volume ?? 0
+      return {
+        unitPrice: currentPrice,
+        totalAmount: vol > 0 ? currentPrice * vol : null,
+        volume: vol,
+        isEstimated: true,
+      }
+    }
+    return { unitPrice: null, totalAmount: null, volume: volume ?? 0, isEstimated: false }
   }
 
   const vol = volume ?? 0
@@ -81,6 +92,7 @@ export function normalizePriceAndVolume(
       unitPrice: realUnitPrice,
       totalAmount: vol > 0 ? (price > 10000 ? price : realUnitPrice * vol) : null,
       volume: vol,
+      isEstimated: false,
     }
   }
 
@@ -93,6 +105,7 @@ export function normalizePriceAndVolume(
       unitPrice: validUnitPrice,
       totalAmount: price,
       volume: vol,
+      isEstimated: false,
     }
   }
 
@@ -100,6 +113,7 @@ export function normalizePriceAndVolume(
     unitPrice: price,
     totalAmount: vol > 0 ? price * vol : null,
     volume: vol,
+    isEstimated: false,
   }
 }
 
@@ -155,28 +169,34 @@ const KNOWN_STOCK_PRICES_MAP: Record<string, number> = {
 export function getSingleSharePrice(
   price: number | null | undefined,
   volume: number | null | undefined,
-  stockId?: string
+  stockId?: string,
+  currentPrice?: number | null
 ): number | null {
-  const norm = normalizePriceAndVolume(price, volume, stockId)
+  const norm = normalizePriceAndVolume(price, volume, stockId, currentPrice)
   return norm.unitPrice
 }
 
 export function formatSingleSharePrice(
   price: number | null | undefined,
   volume: number | null | undefined,
-  stockId?: string
-): string {
-  const norm = normalizePriceAndVolume(price, volume, stockId)
-  if (norm.unitPrice == null || norm.unitPrice <= 0) return '未成交'
-  return `NT$ ${norm.unitPrice.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  stockId?: string,
+  currentPrice?: number | null
+): { text: string; isEstimated: boolean } {
+  const norm = normalizePriceAndVolume(price, volume, stockId, currentPrice)
+  if (norm.unitPrice == null || norm.unitPrice <= 0) return { text: '未成交', isEstimated: false }
+  return {
+    text: `NT$ ${norm.unitPrice.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    isEstimated: norm.isEstimated,
+  }
 }
 
 export function formatTotalAmount(
   price: number | null | undefined,
   volume?: number | null | undefined,
-  stockId?: string
+  stockId?: string,
+  currentPrice?: number | null
 ): string {
-  const norm = normalizePriceAndVolume(price, volume, stockId)
+  const norm = normalizePriceAndVolume(price, volume, stockId, currentPrice)
   if (norm.totalAmount == null || norm.totalAmount <= 0) return '—'
   const total = norm.totalAmount
   if (total >= 100000000) {
@@ -223,12 +243,15 @@ export function estimateGiftValue(giftName?: string | null): number {
 export function calculateCpRatio(
   price: number | null | undefined,
   giftName?: string | null,
-  volume?: number | null | undefined
+  volume?: number | null | undefined,
+  currentPrice?: number | null
 ): number {
-  if (!price || price <= 0 || !volume || volume <= 0) return 0
+  if (!volume || volume <= 0) return 0
+  const unitP = getSingleSharePrice(price, volume, undefined, currentPrice)
+  if (!unitP || unitP <= 0) return 0
   const estimatedValue = estimateGiftValue(giftName)
   if (estimatedValue <= 0) return 0
-  return estimatedValue / price
+  return estimatedValue / unitP
 }
 
 export function getMonthDayWeight(dateStr?: string | null): number {
@@ -567,7 +590,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
 
       // 僅顯示高 CP 值 (投報比 >= 1.0)
       if (onlyHighCp) {
-        const cp = calculateCpRatio(item.price, item.gift_name, item.volume)
+        const cp = calculateCpRatio(item.price, item.gift_name, item.volume, item.current_price)
         if (cp < 1.0) return false
       }
 
@@ -609,20 +632,24 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
           return (wA - wB) * modifier
         }
         case 'unit_price': {
-          const pA = getSingleSharePrice(a.price, a.volume) ?? -1
-          const pB = getSingleSharePrice(b.price, b.volume) ?? -1
+          const pA = getSingleSharePrice(a.price, a.volume, a.stock_id, a.current_price) ?? -1
+          const pB = getSingleSharePrice(b.price, b.volume, b.stock_id, b.current_price) ?? -1
           return (pA - pB) * modifier
         }
         case 'total_amount': {
-          const totA = (a.price ?? 0) * (a.volume ?? 0)
-          const totB = (b.price ?? 0) * (b.volume ?? 0)
+          const totA = getSingleSharePrice(a.price, a.volume, a.stock_id, a.current_price) != null
+            ? (getSingleSharePrice(a.price, a.volume, a.stock_id, a.current_price) ?? 0) * (a.volume ?? 0)
+            : 0
+          const totB = getSingleSharePrice(b.price, b.volume, b.stock_id, b.current_price) != null
+            ? (getSingleSharePrice(b.price, b.volume, b.stock_id, b.current_price) ?? 0) * (b.volume ?? 0)
+            : 0
           return (totA - totB) * modifier
         }
         case 'volume':
           return ((a.volume ?? 0) - (b.volume ?? 0)) * modifier
         case 'cp_ratio':
           return (
-            (calculateCpRatio(a.price, a.gift_name, a.volume) - calculateCpRatio(b.price, b.gift_name, b.volume)) *
+            (calculateCpRatio(a.price, a.gift_name, a.volume, a.current_price) - calculateCpRatio(b.price, b.gift_name, b.volume, b.current_price)) *
             modifier
           )
         case 'restriction':
@@ -1112,15 +1139,27 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                       </td>
 
                       {/* 💵 1股成交價 */}
-                      <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-400 whitespace-nowrap">
-                        {formatSingleSharePrice(item.price, item.volume, item.stock_id)}
+                      <td className="px-4 py-3.5 text-right font-mono font-bold whitespace-nowrap">
+                        {(() => {
+                          const { text, isEstimated } = formatSingleSharePrice(item.price, item.volume, item.stock_id, item.current_price)
+                          if (text === '未成交') return <span className="text-white/40">未成交</span>
+                          return (
+                            <span className={isEstimated ? 'text-cyan-400' : 'text-emerald-400'}>
+                              {text}
+                              {isEstimated && (
+                                <span className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30" title="無零股成交，以即時股價推估">
+                                  估
+                                </span>
+                              )}
+                            </span>
+                          )
+                        })()}
                       </td>
 
                       {/* 💎 價值評分 (CP值) */}
                       <td className="px-4 py-3.5 text-right whitespace-nowrap font-mono text-xs">
                         {(() => {
-                          const unitP = getSingleSharePrice(item.price, item.volume, item.stock_id)
-                          const cpRatio = calculateCpRatio(unitP, giftName, item.volume)
+                          const cpRatio = calculateCpRatio(item.price, giftName, item.volume, item.current_price)
                           const { label, badgeClass } = formatCpRatio(cpRatio)
                           return (
                             <span className={`px-2.5 py-0.5 rounded-lg border text-xs ${badgeClass}`}>
@@ -1132,7 +1171,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
 
                       {/* 💰 成交總金額 */}
                       <td className="px-4 py-3.5 text-right font-mono text-xs text-white/80 whitespace-nowrap">
-                        {formatTotalAmount(item.price, item.volume, item.stock_id)}
+                        {formatTotalAmount(item.price, item.volume, item.stock_id, item.current_price)}
                       </td>
 
                       {/* 零股成交量 */}

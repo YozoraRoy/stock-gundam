@@ -15,3 +15,6 @@ debug-diag.mjs
 scratch_test.js
 kudu_*.py
 .gitlab-ci.yml
+*.ps1
+creds.json
+azure_logs*.zip
