@@ -101,7 +101,7 @@ jobs:
             --max-time 30 \
             -u "$USER:$PASS" \
             -H "Content-Type: application/json" \
-            -d '{"command":"rm -rf /home/site/wwwroot/* /home/site/wwwroot/.[!.]* 2>/dev/null; echo done","dir":"/home/site/wwwroot"}' \
+            -d '{"command":"sh -c \"rm -rf /home/site/wwwroot/* /home/site/wwwroot/.[!.]* 2>/dev/null; echo CLEAN_DONE\"","dir":"/home/site/wwwroot"}' \
             "$SCM_URL/api/command"
           
           echo "Uploading deploy.zip (timeout: 600s)..."
@@ -121,5 +121,5 @@ jobs:
             --max-time 60 \
             -u "$USER:$PASS" \
             -H "Content-Type: application/json" \
-            -d '{"command":"set -e; rm -f /home/site/wwwroot/node_modules /home/site/wwwroot/oryx-manifest.toml /home/site/wwwroot/node_modules.tar.gz; if [ -f /home/site/wwwroot/node_modules/.bin/next ]; then echo NEXT_OK_BIN; else echo NEXT_MISSING; fi","dir":"/home"}' \
+            -d '{"command":"sh -c \"rm -f /home/site/wwwroot/node_modules /home/site/wwwroot/oryx-manifest.toml /home/site/wwwroot/node_modules.tar.gz; if [ -f /home/site/wwwroot/node_modules/.bin/next ]; then echo NEXT_OK_BIN; else echo NEXT_MISSING; fi\"","dir":"/home"}' \
             "$SCM_URL/api/command"
