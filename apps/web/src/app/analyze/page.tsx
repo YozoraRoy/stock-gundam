@@ -87,6 +87,11 @@ function AnalyzeContent() {
         signal: controller.signal,
       })
 
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(body.error || `HTTP ${res.status}`)
+      }
+
       if (!res.body) throw new Error('No response body')
 
       const reader = res.body.getReader()

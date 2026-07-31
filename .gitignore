@@ -7,10 +7,14 @@ dist/
 .DS_Store
 *.log
 .turbo/
-deploy*.zip
+*.zip
 azure_logs/
 webapp_logs/
 session-*.md
+azure_log_stream.txt
+analyze_body*.txt
+analyze_test.txt
+yahoo_test.json
 debug-diag.mjs
 scratch_test.js
 kudu_*.py
