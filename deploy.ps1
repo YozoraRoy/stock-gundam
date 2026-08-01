@@ -1,5 +1,8 @@
-# Azure 一鍵部署腳本 (超低成本 SQLite 方案)
-Write-Host "=== 開始 Azure 部署規劃 ===" -ForegroundColor Cyan
+# Azure 手動部署腳本 (備援方法 Backups)
+# 主要部署方式為 GitHub Actions（.github/workflows/deploy.yml，push main 自動部署）。
+# 本腳本僅在 GitHub Actions 不可用、或需立即部署尚未推送之變更時作為備援。
+# 注意：若未設定 $env:OPENAI_API_KEY，第 29 行會寫入 YOUR_API_KEY_HERE 覆寫線上金鑰！
+Write-Host "=== 開始 Azure 手動部署規劃 (備援方法) ===" -ForegroundColor Cyan
 
 $ResourceGroup = "rg-yuzora_roy_ai"
 $Subscription = "c1a88666-9a4e-4a0f-8335-2b6191c4f38c"

@@ -79,6 +79,9 @@ jobs:
               FALLBACK_DEEP_THINK_MODEL=nemotron-3-ultra-free \
               FALLBACK_QUICK_THINK_MODEL=nemotron-3-ultra-free \
               LLM_TEMPERATURE=0.7 \
+              LLM_DISABLE_THINKING=true \
+              LLM_TIMEOUT_MS=180000 \
+              LLM_MAX_TOKENS=8192 \
               NPM_RUN_BUILD=false \
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               ENABLE_ORYX_BUILD=false \

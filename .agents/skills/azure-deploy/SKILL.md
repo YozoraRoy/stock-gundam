@@ -22,13 +22,44 @@ description: |
 
 ---
 
+## 部署策略總覽 (Primary / Backup)
+
+| 方式 | 用途 | 觸發 |
+|------|------|------|
+| 🥇 **GitHub Actions 自動部署** | 主要部署方式 | `git push origin main` |
+| 🥈 **本機 `deploy.ps1` 手動部署** | 備援/急修（GH Actions 不可用或需帶本機設定時） | 手動執行 |
+
+> [!IMPORTANT]
+> **常規流程一律走 GitHub Actions**（`.github/workflows/deploy.yml`）。只有當 GitHub 端發生問題、或需要立即部署尚未推送的變更時，才使用本機手動部署作為備援。
+
 ## 核心部署策略 (為什麼這樣做)
 
 ### 架構決策：Self-Contained Zip 部署（禁用 Oryx Build）
 
 **問題根源**：Azure B1 方案 RAM 只有 1.75GB，如果在雲端執行 `npm install`，往往因超時（230秒限制）導致容器啟動失敗，出現 `sh: 1: next: not found (exit code 127)`。
 
-**解決方案**：在本地完整建置 + 打包所有 `node_modules`，直接上傳一個「可即時執行」的完整 Zip 包。
+**解決方案**：在 CI Runner（GitHub Actions）或本機完整建置 + 打包所有 `node_modules`，直接上傳一個「可即時執行」的完整 Zip 包，雲端一律不執行 npm install（`ENABLE_ORYX_BUILD=false`）。
+
+### 方法 A（主要）：GitHub Actions 自動部署
+
+Workflow 檔：`.github/workflows/deploy.yml`（`push` 到 `main` 觸發）。
+
+**CI 流程**：
+1. `actions/checkout@v4` + `actions/setup-node@v4` (Node 20)
+2. `npm ci` → `npm run local-build`
+3. 修正 `node_modules/.bin` symlink（讓 Linux 容器可直接執行 `next`）
+4. `zip -r deploy.zip`（含 `node_modules`）
+5. `azure/login@v2`（需 `AZURE_CREDENTIALS` secret）
+6. `az webapp config appsettings set`（設定所有環境變數）
+7. Kudu `POST /api/zipdeploy?clean=true` 上傳部署
+8. 健康檢查輪詢 `https://stock-platform-roy.azurewebsites.net/`
+
+**需要設定的 GitHub Secrets**（Repository → Settings → Secrets and variables → Actions）：
+- `AZURE_CREDENTIALS`：Azure Service Principal JSON（`az ad sp create-for-rbac --name stock-platform-roy-gha --role contributor --scopes /subscriptions/<sub> --sdk-auth`）
+- `OPENAI_API_KEY`：OpenCode AI API Key
+- `DATABASE_URL`：SQL Server 連線字串
+
+**部署確認**：`gh run list` / `gh run watch <id>`，或 GitHub Actions 頁面。
 
 ### 關鍵設定
 
@@ -47,6 +78,26 @@ Windows 的 `Compress-Archive` 使用反斜線 `\` 路徑，在 Linux 容器解�
 
 ## 完整部署流程 (SOP)
 
+### 🥇 方法 A（主要）：GitHub Actions 自動部署
+
+```bash
+cd d:\PG\stock-platform
+git add .
+git commit -m "描述本次變更"
+git push origin main    # ← 觸發 .github/workflows/deploy.yml
+```
+
+**確認部署**：
+```bash
+gh run list --repo YozoraRoy/stock-gundam --limit 3
+gh run watch <run-id> --repo YozoraRoy/stock-gundam --exit-status
+```
+或到 GitHub → Actions → Deploy to Azure 頁面查看。成功需約 8-9 分鐘。
+
+**部署成功後線上驗證**：`https://stock-platform-roy.azurewebsites.net` 回應 200，且 `/api/diag` 或 `/api/analysis-records` 正常。
+
+### 🥈 方法 B（備援）：本機手動部署
+
 ### Step 1：確認環境
 
 ```powershell
@@ -61,6 +112,9 @@ az login
 
 ```powershell
 cd d:\PG\stock-platform
+
+# 若未設定 $env:OPENAI_API_KEY，務必先手動帶入，否則會覆寫成 YOUR_API_KEY_HERE
+$env:OPENAI_API_KEY = "sk-xxx"
 powershell -ExecutionPolicy Bypass -File deploy.ps1
 ```
 
@@ -166,6 +220,10 @@ az webapp config appsettings set --name stock-platform-roy --resource-group rg-y
 | `FALLBACK_DEEP_THINK_MODEL` | `nemotron-3-ultra-free` | Fallback 深度模型 |
 | `FALLBACK_QUICK_THINK_MODEL` | `nemotron-3-ultra-free` | Fallback 快速模型 |
 | `LLM_TEMPERATURE` | `0.7` | LLM 溫度設定 |
+| `LLM_DISABLE_THINKING` | `true` | 停用推理鏈（big-pickle 會把 token 全燒在 reasoning 導致空回應） |
+| `LLM_TIMEOUT_MS` | `180000` | LLM 呼叫逾時毫秒數 |
+| `LLM_MAX_TOKENS` | `8192` | LLM 最大輸出 token 數 |
+| `DATABASE_URL` | `Server=...` | SQL Server 連線字串（GitHub Secret） |
 | `NPM_RUN_BUILD` | `false` | 禁止雲端建置 |
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `false` | 禁止 SCM 建置 |
 | `ENABLE_ORYX_BUILD` | `false` | 禁止 Oryx 建置 |

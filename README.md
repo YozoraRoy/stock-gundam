@@ -123,12 +123,45 @@ npm run dev
 
 ## 🌐 部署與 Skill (Azure Deployment)
 
-專案已內建專屬的 **Azure 部署 Skill** ([SKILL.md](file:///d:/PG/stock-platform/.agents/skills/azure-deploy/SKILL.md))：
+> **部署策略：GitHub Actions 自動部署為主，本機 `deploy.ps1` 手動部署為輔。**
+
+### 🥇 主要方式：GitHub Actions 自動部署 (Primary)
+
+每次推送 `main` 分支即自動觸發部署 Workflow (`.github/workflows/deploy.yml`)：
 
 ```bash
-# 執行一鍵 Azure 自動部署 (包含完整 Zip 打包、環境變數與持久化設定)
+git add .
+git commit -m "your change"
+git push origin main   # ← 自動觸發部署
+```
+
+**流程**：GitHub Runner 上執行 `npm ci` → `npm run local-build` → 打包含 `node_modules` 的 `deploy.zip`（禁雲端 Oryx 建置，解決 B1 記憶體不足）→ 設定環境變數 → 透過 Kudu `zipdeploy?clean=true` 部署至 Azure。
+
+**需要的 GitHub Secrets**（需在 `https://github.com/YozoraRoy/stock-gundam/settings/secrets/actions` 設定）：
+
+| Secret | 內容 |
+|--------|------|
+| `AZURE_CREDENTIALS` | Azure Service Principal JSON（`az ad sp create-for-rbac` 產生） |
+| `OPENAI_API_KEY` | OpenCode AI API Key |
+| `DATABASE_URL` | SQL Server 連線字串 |
+
+**線上監看**：`gh run watch` 或 GitHub → Actions 頁面。
+
+### 🥈 備援方式：本機手動部署 (Backup)
+
+當 GitHub Actions 不可用（例如連線問題、急修、或需要帶入本機尚未推送的設定時），改用本機一鍵腳本：
+
+```bash
 powershell -ExecutionPolicy Bypass -File ./deploy.ps1
 ```
+
+* 本機會先執行 `npm run local-build`，再用 `tar.exe` 打包 Zip 並以 `az webapp deploy` 上傳。
+* 注意：`deploy.ps1` 會以 `$env:OPENAI_API_KEY` 覆寫 Azure 的 `OPENAI_API_KEY`，**若未設定環境變數請手動帶入**：
+  ```powershell
+  $env:OPENAI_API_KEY="sk-xxx"; powershell -ExecutionPolicy Bypass -File ./deploy.ps1
+  ```
+
+專案已內建專屬的 **Azure 部署 Skill**（含常見錯誤診斷手冊）：[SKILL.md](file:///d:/PG/stock-platform/.agents/skills/azure-deploy/SKILL.md)
 
 * **線上體驗網站**：[https://stock-platform-roy.azurewebsites.net](https://stock-platform-roy.azurewebsites.net)
 * **GitHub 倉庫**：[https://github.com/YozoraRoy/stock-gundam](https://github.com/YozoraRoy/stock-gundam)
