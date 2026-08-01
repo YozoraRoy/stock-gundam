@@ -13,6 +13,8 @@ export class MarketDataError extends AppError {
 }
 
 export class AIError extends AppError {
+  /** When false, callers (e.g. FallbackClient) should not retry this error. */
+  retryable?: boolean
   constructor(message: string) {
     super(message, 'AI_ERROR')
     this.name = 'AIError'

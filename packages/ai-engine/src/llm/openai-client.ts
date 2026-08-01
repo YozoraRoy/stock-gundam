@@ -74,10 +74,16 @@ export class OpenAICompatibleClient implements LLMClient {
 
         if (!res.ok) {
           const errText = await res.text()
-          if (res.status === 429 || res.status >= 500) {
-            throw new AIError(`API ${res.status}: ${errText}`)
+          const retryAfter = this.parseRetryAfter(res, errText)
+          const quotaBlocked = res.status === 429 && retryAfter > 30
+          const err = new AIError(
+            `API ${res.status}: ${errText}${retryAfter > 0 ? ` (retry after ~${Math.round(retryAfter / 60)} min)` : ''}`,
+          )
+          // 帳戶層級配額封鎖（例如 free tier 用量上限）：重試無意義，直接拋出讓 Fallback 接手。
+          if (quotaBlocked) {
+            err.retryable = false
           }
-          throw new AIError(`API ${res.status}: ${errText}`)
+          throw err
         }
 
         const data: any = await res.json()
@@ -103,7 +109,7 @@ export class OpenAICompatibleClient implements LLMClient {
         lastError = e
 
         const isTimeout = e.name === 'AbortError'
-        const isRetryable = isTimeout || e.message?.includes('fetch failed') || e.message?.includes('network error') || e instanceof AIError
+        const isRetryable = isTimeout || e.message?.includes('fetch failed') || e.message?.includes('network error') || (e instanceof AIError && e.retryable !== false)
 
         console.warn(`[OpenAIClient] Attempt ${attempt}/${maxRetries} failed: ${e.message || e}`)
 
@@ -116,5 +122,15 @@ export class OpenAICompatibleClient implements LLMClient {
     }
 
     throw new AIError(`LLM API connection failed after ${maxRetries} attempts: ${lastError?.message || lastError}`)
+  }
+
+  private parseRetryAfter(res: Response, errText: string): number {
+    const header = res.headers.get('retry-after')
+    if (header) {
+      const sec = Number(header)
+      if (!Number.isNaN(sec) && sec > 0) return sec
+    }
+    const m = errText.match(/"retryAfter"?\s*:\s*(\d+)/i)
+    return m ? Number(m[1]) : 0
   }
 }
