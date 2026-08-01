@@ -39,7 +39,7 @@ export async function POST(req: Request) {
         }
 
         try {
-          const { state, signal } = await engine.analyze(
+          const { state, signal, tokenUsage } = await engine.analyze(
             symbol,
             date ?? new Date().toISOString().split('T')[0],
             (step: string, detail: string) => send('progress', { step, detail }),
@@ -48,6 +48,7 @@ export async function POST(req: Request) {
           const resultPayload = {
             signal,
             decision: state.finalDecision,
+            tokenUsage,
             reports: {
               market: state.marketReport,
               sentiment: state.sentimentReport,

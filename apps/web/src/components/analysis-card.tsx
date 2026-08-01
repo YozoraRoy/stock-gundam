@@ -1,11 +1,17 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { TrendingUp, AlertTriangle, Newspaper, BarChart3, Target } from 'lucide-react'
+import { TrendingUp, AlertTriangle, Newspaper, BarChart3, Target, Gauge } from 'lucide-react'
+
+interface TokenUsage {
+  agents: { agent: string; promptTokens: number; completionTokens: number; totalTokens: number }[]
+  total: { promptTokens: number; completionTokens: number; totalTokens: number }
+}
 
 interface AnalysisCardProps {
   analysis: {
     signal: string
     decision: string
+    tokenUsage?: TokenUsage
     reports: {
       market: string
       sentiment: string
@@ -77,6 +83,53 @@ export function AnalysisCard({ analysis }: AnalysisCardProps) {
           </section>
         )
       })}
+
+      {analysis.tokenUsage && (
+        <section className="bg-[var(--bg-card)] rounded-xl border border-white/5 overflow-hidden">
+          <div className="flex items-center gap-3 px-6 pt-5 pb-3 border-b border-white/5">
+            <Gauge className="w-5 h-5 text-[var(--accent)]" />
+            <h3 className="text-base font-semibold">Token 用量</h3>
+          </div>
+          <div className="px-6 py-4">
+            <div className="grid grid-cols-3 gap-4 mb-5">
+              <div className="bg-white/5 rounded-lg p-3 text-center">
+                <div className="text-xs text-[var(--text-secondary)] mb-1">Prompt Tokens</div>
+                <div className="text-lg font-semibold">{analysis.tokenUsage.total.promptTokens.toLocaleString()}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3 text-center">
+                <div className="text-xs text-[var(--text-secondary)] mb-1">Completion Tokens</div>
+                <div className="text-lg font-semibold">{analysis.tokenUsage.total.completionTokens.toLocaleString()}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3 text-center">
+                <div className="text-xs text-[var(--text-secondary)] mb-1">Total Tokens</div>
+                <div className="text-lg font-semibold text-[var(--accent)]">{analysis.tokenUsage.total.totalTokens.toLocaleString()}</div>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-[var(--text-secondary)] border-b border-white/5">
+                    <th className="py-2 pr-4 font-medium">Agent</th>
+                    <th className="py-2 pr-4 font-medium text-right">Prompt</th>
+                    <th className="py-2 pr-4 font-medium text-right">Completion</th>
+                    <th className="py-2 font-medium text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analysis.tokenUsage.agents.map(agent => (
+                    <tr key={agent.agent} className="border-b border-white/5 last:border-0">
+                      <td className="py-2 pr-4">{agent.agent}</td>
+                      <td className="py-2 pr-4 text-right text-[var(--text-secondary)]">{agent.promptTokens.toLocaleString()}</td>
+                      <td className="py-2 pr-4 text-right text-[var(--text-secondary)]">{agent.completionTokens.toLocaleString()}</td>
+                      <td className="py-2 text-right font-medium">{agent.totalTokens.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   )
 }

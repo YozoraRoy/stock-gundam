@@ -1,7 +1,9 @@
-import type { LLMClient, LLMConfig } from './client.js'
+import type { LLMClient, LLMConfig, LLMUsage } from './client.js'
 import { AIError } from '@stock/core'
 
 export class OpenAICompatibleClient implements LLMClient {
+  onUsage?: (usage: LLMUsage) => void
+
   constructor(private config: LLMConfig) {}
 
   async generate(systemPrompt: string, userPrompt: string): Promise<string> {
@@ -78,7 +80,15 @@ export class OpenAICompatibleClient implements LLMClient {
           throw new AIError(`API ${res.status}: ${errText}`)
         }
 
-        const data = await res.json()
+        const data: any = await res.json()
+
+        if (this.onUsage && data.usage) {
+          this.onUsage({
+            promptTokens: data.usage.prompt_tokens,
+            completionTokens: data.usage.completion_tokens,
+          })
+        }
+
         const message = data.choices?.[0]?.message
         if (message?.content) {
           return message.content

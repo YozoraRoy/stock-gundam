@@ -1,6 +1,6 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { generateText, generateObject } from 'ai'
-import type { LLMClient, LLMConfig } from './client.js'
+import type { LLMClient, LLMConfig, LLMUsage } from './client.js'
 import { AIError } from '@stock/core'
 
 function parseRetryDelay(msg: string): number | null {
@@ -41,6 +41,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 5): Promise<T> {
 }
 
 export class GoogleClient implements LLMClient {
+  onUsage?: (usage: LLMUsage) => void
   private provider: ReturnType<typeof createGoogleGenerativeAI>
   private lastCallTime = 0
   private readonly minInterval = 6000
@@ -64,13 +65,14 @@ export class GoogleClient implements LLMClient {
   async generate(systemPrompt: string, userPrompt: string): Promise<string> {
     return withRetry(async () => {
       await this.waitForQuota()
-      const { text } = await generateText({
+      const { text, usage } = await generateText({
         model: this.provider(this.config.model),
         system: systemPrompt,
         prompt: userPrompt,
         temperature: this.config.temperature,
         maxRetries: 0,
       })
+      this.reportUsage(usage)
       return text
     })
   }
@@ -78,7 +80,7 @@ export class GoogleClient implements LLMClient {
   async generateObject<T>(systemPrompt: string, userPrompt: string, schema: any): Promise<T> {
     return withRetry(async () => {
       await this.waitForQuota()
-      const { object } = await generateObject({
+      const { object, usage } = await generateObject({
         model: this.provider(this.config.model),
         system: systemPrompt,
         prompt: userPrompt,
@@ -86,7 +88,15 @@ export class GoogleClient implements LLMClient {
         temperature: this.config.temperature,
         maxRetries: 0,
       })
+      this.reportUsage(usage)
       return object as T
+    })
+  }
+
+  private reportUsage(usage: { promptTokens?: number; completionTokens?: number } | undefined) {
+    this.onUsage?.({
+      promptTokens: usage?.promptTokens,
+      completionTokens: usage?.completionTokens,
     })
   }
 }

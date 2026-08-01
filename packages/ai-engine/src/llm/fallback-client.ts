@@ -1,10 +1,19 @@
-import type { LLMClient } from './client.js'
+import type { LLMClient, LLMUsage } from './client.js'
 
 export class FallbackClient implements LLMClient {
   constructor(
     private primary: LLMClient,
     private fallback: LLMClient,
   ) {}
+
+  get onUsage(): ((usage: LLMUsage) => void) | undefined {
+    return this.primary.onUsage
+  }
+
+  set onUsage(cb: ((usage: LLMUsage) => void) | undefined) {
+    this.primary.onUsage = cb
+    this.fallback.onUsage = cb
+  }
 
   async generate(systemPrompt: string, userPrompt: string): Promise<string> {
     try {

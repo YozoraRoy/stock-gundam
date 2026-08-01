@@ -2,7 +2,9 @@ import { type AnalysisState, AssetType, loadConfig } from '@stock/core'
 import { registry, yahooFinanceProvider } from '@stock/market-data'
 import { LLMFactory } from './llm/factory.js'
 import { FallbackClient } from './llm/fallback-client.js'
+import { LLMUsageTracker } from './llm/usage.js'
 import type { LLMClient } from './llm/client.js'
+import type { TokenUsageSummary } from './llm/usage.js'
 import { WorkflowGraph } from './graph/workflow.js'
 import { MemoryLog } from './graph/memory.js'
 import { Reflector } from './graph/reflection.js'
@@ -52,6 +54,7 @@ export class TradingEngine {
   private memory: MemoryLog
   private reflector: Reflector
   private signalProcessor = new SignalProcessor()
+  private usageTracker = new LLMUsageTracker()
 
   constructor() {
     registry.register(yahooFinanceProvider)
@@ -76,6 +79,9 @@ export class TradingEngine {
       this.quickLLM = new FallbackClient(this.quickLLM, createClient(fallbackQuickModel, fallbackProvider))
     }
 
+    this.deepLLM = this.usageTracker.attach(this.deepLLM)
+    this.quickLLM = this.usageTracker.attach(this.quickLLM)
+
     this.memory = new MemoryLog(config.memoryLogPath)
     this.reflector = new Reflector(this.quickLLM)
   }
@@ -85,7 +91,8 @@ export class TradingEngine {
     tradeDate: string,
     onProgress?: ProgressCallback,
     assetType: AssetType = AssetType.Stock,
-  ): Promise<{ state: AnalysisState; signal: string }> {
+  ): Promise<{ state: AnalysisState; signal: string; tokenUsage: TokenUsageSummary }> {
+    this.usageTracker.reset()
     onProgress?.('Symbol Normalizer', 'Resolving ticker symbol...')
     const resolvedTicker = await resolveSymbol(ticker)
 
@@ -184,6 +191,7 @@ ${historyContext}`
     const wrap = (name: string, fn: (s: AnalysisState) => Promise<Partial<AnalysisState>>) => {
       return async (s: AnalysisState) => {
         onProgress?.(name, 'running...')
+        this.usageTracker.setCurrentAgent(name)
         const result = await fn(s)
         onProgress?.(name, 'done')
         return result
@@ -212,6 +220,7 @@ ${historyContext}`
 
     const finalState = await graph.execute(initialState)
     const signal = this.signalProcessor.process(finalState.finalDecision)
+    const tokenUsage = this.usageTracker.getSummary()
 
     await this.memory.store({
       ticker,
@@ -221,6 +230,6 @@ ${historyContext}`
       pending: true,
     })
 
-    return { state: finalState, signal }
+    return { state: finalState, signal, tokenUsage }
   }
 }
