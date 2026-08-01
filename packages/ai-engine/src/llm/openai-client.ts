@@ -33,11 +33,29 @@ export class OpenAICompatibleClient implements LLMClient {
 
   private async callAPI(messages: { role: string; content: string }[]): Promise<string> {
     const maxRetries = 3
+    const timeoutMs = Number(process.env.LLM_TIMEOUT_MS) || 180_000
+    const maxTokens = Number(process.env.LLM_MAX_TOKENS) || 8192
+    const disableThinking = (process.env.LLM_DISABLE_THINKING ?? 'true').toLowerCase() !== 'false'
+
     let lastError: any = null
+
+    const requestBody: Record<string, any> = {
+      model: this.config.model,
+      messages,
+      temperature: this.config.temperature,
+      max_tokens: maxTokens,
+    }
+
+    // 推理型模型（如 big-pickle/deepseek-v4-flash）會把 token 預算全燒在
+    // reasoning_content，導致 content 為空或逾時。OpenCode Zen 支援停用
+    // thinking，讓模型直接輸出答案，避免「No content」與 60s abort。
+    if (disableThinking && this.config.baseUrl?.includes('opencode.ai')) {
+      requestBody.thinking = { type: 'disabled' }
+    }
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 60000)
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
       try {
         const res = await fetch(`${this.config.baseUrl}/chat/completions`, {
@@ -46,12 +64,7 @@ export class OpenAICompatibleClient implements LLMClient {
             Authorization: `Bearer ${this.config.apiKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            model: this.config.model,
-            messages,
-            temperature: this.config.temperature,
-            max_tokens: 4096,
-          }),
+          body: JSON.stringify(requestBody),
           signal: controller.signal,
         })
 
@@ -66,11 +79,14 @@ export class OpenAICompatibleClient implements LLMClient {
         }
 
         const data = await res.json()
-        const content = data.choices?.[0]?.message?.content
-        if (!content) {
-          throw new AIError('No content in model response')
+        const message = data.choices?.[0]?.message
+        if (message?.content) {
+          return message.content
         }
-        return content
+        if (message?.reasoning_content) {
+          return message.reasoning_content
+        }
+        throw new AIError('No content in model response')
 
       } catch (e: any) {
         clearTimeout(timeoutId)
