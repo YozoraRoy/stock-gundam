@@ -1,10 +1,15 @@
-import type { LLMClient, LLMConfig, LLMUsage } from './client.js'
+import type { LLMClient, LLMConfig, LLMCallInfo, LLMUsage } from './client.js'
 import { AIError } from '@stock/core'
 
 export class OpenAICompatibleClient implements LLMClient {
   onUsage?: (usage: LLMUsage) => void
+  onCall?: (info: LLMCallInfo) => void
 
   constructor(private config: LLMConfig) {}
+
+  get model(): string {
+    return this.config.model
+  }
 
   async generate(systemPrompt: string, userPrompt: string): Promise<string> {
     return this.callAPI([
@@ -97,9 +102,11 @@ export class OpenAICompatibleClient implements LLMClient {
 
         const message = data.choices?.[0]?.message
         if (message?.content) {
+          this.onCall?.({ model: this.config.model, usedFallback: false })
           return message.content
         }
         if (message?.reasoning_content) {
+          this.onCall?.({ model: this.config.model, usedFallback: false })
           return message.reasoning_content
         }
         throw new AIError('No content in model response')

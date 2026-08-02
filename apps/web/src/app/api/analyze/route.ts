@@ -45,10 +45,12 @@ export async function POST(req: Request) {
             (step: string, detail: string) => send('progress', { step, detail }),
           )
 
+          const modelPlan = engine.getModelPlan()
           const resultPayload = {
             signal,
             decision: state.finalDecision,
             tokenUsage,
+            modelPlan,
             reports: {
               market: state.marketReport,
               sentiment: state.sentimentReport,
@@ -57,6 +59,8 @@ export async function POST(req: Request) {
             },
           }
 
+          const fallbackCount = tokenUsage.agents.reduce((n, a) => n + (a.fallbackCalls ?? 0), 0)
+
           try {
             const decisionObj = typeof state.finalDecision === 'object' ? state.finalDecision : {}
             await saveAnalysisRecord({
@@ -64,6 +68,10 @@ export async function POST(req: Request) {
               recommendation: signal || (decisionObj as any)?.rating || (decisionObj as any)?.final_decision || 'Hold',
               summary: (decisionObj as any)?.investmentThesis || (decisionObj as any)?.rationale || (typeof state.finalDecision === 'string' ? state.finalDecision : ''),
               fullReport: resultPayload,
+              modelUsage: JSON.stringify(tokenUsage.agents),
+              primaryModels: JSON.stringify(modelPlan),
+              fallbackUsed: fallbackCount > 0,
+              fallbackCount,
             })
           } catch (dbErr) {
             console.error('[API/Analyze] Failed to save analysis record to DB:', dbErr)

@@ -2,9 +2,25 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { TrendingUp, AlertTriangle, Newspaper, BarChart3, Target, Gauge } from 'lucide-react'
 
+interface AgentUsage {
+  agent: string
+  model?: string | null
+  fallbackCalls?: number
+  usedFallback?: boolean
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
 interface TokenUsage {
-  agents: { agent: string; promptTokens: number; completionTokens: number; totalTokens: number }[]
+  agents: AgentUsage[]
   total: { promptTokens: number; completionTokens: number; totalTokens: number }
+}
+
+interface ModelPlan {
+  deep: string
+  quick: string
+  fallback: { provider: string; deep: string; quick: string } | null
 }
 
 interface AnalysisCardProps {
@@ -12,6 +28,7 @@ interface AnalysisCardProps {
     signal: string
     decision: string
     tokenUsage?: TokenUsage
+    modelPlan?: ModelPlan
     reports: {
       market: string
       sentiment: string
@@ -86,10 +103,20 @@ export function AnalysisCard({ analysis }: AnalysisCardProps) {
 
       {analysis.tokenUsage && (
         <section className="bg-[var(--bg-card)] rounded-xl border border-white/5 overflow-hidden">
-          <div className="flex items-center gap-3 px-6 pt-5 pb-3 border-b border-white/5">
-            <Gauge className="w-5 h-5 text-[var(--accent)]" />
-            <h3 className="text-base font-semibold">Token 用量</h3>
-          </div>
+            <div className="flex items-center gap-3 px-6 pt-5 pb-3 border-b border-white/5">
+              <Gauge className="w-5 h-5 text-[var(--accent)]" />
+              <h3 className="text-base font-semibold">Token 用量</h3>
+              {analysis.modelPlan && (
+                <span className="ml-auto text-xs text-[var(--text-secondary)]">
+                  deep={analysis.modelPlan.deep} · quick={analysis.modelPlan.quick}
+                  {analysis.modelPlan.fallback && (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 text-yellow-400">
+                      fallback: {analysis.modelPlan.fallback.deep}
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
           <div className="px-6 py-4">
             <div className="grid grid-cols-3 gap-4 mb-5">
               <div className="bg-white/5 rounded-lg p-3 text-center">
@@ -110,6 +137,7 @@ export function AnalysisCard({ analysis }: AnalysisCardProps) {
                 <thead>
                   <tr className="text-left text-xs text-[var(--text-secondary)] border-b border-white/5">
                     <th className="py-2 pr-4 font-medium">Agent</th>
+                    <th className="py-2 pr-4 font-medium">Model</th>
                     <th className="py-2 pr-4 font-medium text-right">Prompt</th>
                     <th className="py-2 pr-4 font-medium text-right">Completion</th>
                     <th className="py-2 font-medium text-right">Total</th>
@@ -119,6 +147,14 @@ export function AnalysisCard({ analysis }: AnalysisCardProps) {
                   {analysis.tokenUsage.agents.map(agent => (
                     <tr key={agent.agent} className="border-b border-white/5 last:border-0">
                       <td className="py-2 pr-4">{agent.agent}</td>
+                      <td className="py-2 pr-4">
+                        <span className="text-xs text-[var(--text-secondary)]">{agent.model || 'n/a'}</span>
+                        {agent.fallbackCalls ? (
+                          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-red-500/10 border border-red-500/20 px-2 py-0.5 text-xs text-red-400">
+                            fallback ×{agent.fallbackCalls}
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="py-2 pr-4 text-right text-[var(--text-secondary)]">{agent.promptTokens.toLocaleString()}</td>
                       <td className="py-2 pr-4 text-right text-[var(--text-secondary)]">{agent.completionTokens.toLocaleString()}</td>
                       <td className="py-2 text-right font-medium">{agent.totalTokens.toLocaleString()}</td>

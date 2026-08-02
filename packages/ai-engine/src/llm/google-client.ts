@@ -1,6 +1,6 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { generateText, generateObject } from 'ai'
-import type { LLMClient, LLMConfig, LLMUsage } from './client.js'
+import type { LLMClient, LLMConfig, LLMCallInfo, LLMUsage } from './client.js'
 import { AIError } from '@stock/core'
 
 function parseRetryDelay(msg: string): number | null {
@@ -42,6 +42,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 5): Promise<T> {
 
 export class GoogleClient implements LLMClient {
   onUsage?: (usage: LLMUsage) => void
+  onCall?: (info: LLMCallInfo) => void
   private provider: ReturnType<typeof createGoogleGenerativeAI>
   private lastCallTime = 0
   private readonly minInterval = 6000
@@ -51,6 +52,10 @@ export class GoogleClient implements LLMClient {
       apiKey: config.apiKey,
       baseURL: config.baseUrl,
     })
+  }
+
+  get model(): string {
+    return this.config.model
   }
 
   private async waitForQuota() {
@@ -73,6 +78,7 @@ export class GoogleClient implements LLMClient {
         maxRetries: 0,
       })
       this.reportUsage(usage)
+      this.onCall?.({ model: this.config.model, usedFallback: false })
       return text
     })
   }
@@ -89,6 +95,7 @@ export class GoogleClient implements LLMClient {
         maxRetries: 0,
       })
       this.reportUsage(usage)
+      this.onCall?.({ model: this.config.model, usedFallback: false })
       return object as T
     })
   }

@@ -121,6 +121,10 @@ function getSqliteDb(): Database.Database | null {
         recommendation       TEXT    NOT NULL,
         summary              TEXT,
         full_report_json     TEXT    NOT NULL,
+        model_usage          TEXT,
+        primary_models       TEXT,
+        fallback_used        TEXT,
+        fallback_count       INTEGER DEFAULT 0,
         created_at           TEXT    DEFAULT (datetime('now', 'localtime'))
       );
       CREATE INDEX IF NOT EXISTS idx_analysis_ticker ON analysis_records(ticker);
@@ -208,6 +212,10 @@ async function getAzurePool(): Promise<sql.ConnectionPool | null> {
           recommendation       NVARCHAR(50) NOT NULL,
           summary              NVARCHAR(MAX),
           full_report_json     NVARCHAR(MAX) NOT NULL,
+          model_usage          NVARCHAR(4000),
+          primary_models       NVARCHAR(500),
+          fallback_used        NVARCHAR(10),
+          fallback_count       INT DEFAULT 0,
           created_at           DATETIME DEFAULT GETDATE()
         );
         CREATE INDEX idx_analysis_ticker ON analysis_records(ticker);
@@ -668,6 +676,10 @@ export interface AnalysisRecord {
   recommendation: string
   summary?: string
   full_report_json: string
+  model_usage?: string
+  primary_models?: string
+  fallback_used?: string
+  fallback_count?: number
   created_at?: string
 }
 
@@ -676,10 +688,18 @@ export async function saveAnalysisRecord(record: {
   recommendation: string
   summary?: string
   fullReport: any
+  modelUsage?: string
+  primaryModels?: string
+  fallbackUsed?: boolean
+  fallbackCount?: number
 }): Promise<number> {
   const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19)
   const reportJson = typeof record.fullReport === 'string' ? record.fullReport : JSON.stringify(record.fullReport)
   const summaryStr = typeof record.summary === 'string' ? record.summary : JSON.stringify(record.summary || '')
+  const modelUsageStr = record.modelUsage ?? null
+  const primaryModelsStr = record.primaryModels ?? null
+  const fallbackUsedStr = record.fallbackUsed ? '1' : '0'
+  const fallbackCount = record.fallbackCount ?? 0
   let insertedId = -1
 
   if (isAzureSql) {
@@ -691,9 +711,13 @@ export async function saveAnalysisRecord(record: {
           .input('rec', sql.NVarChar(50), record.recommendation || 'Hold')
           .input('summary', sql.NVarChar(sql.MAX), summaryStr)
           .input('report', sql.NVarChar(sql.MAX), reportJson)
+          .input('modelUsage', sql.NVarChar(4000), modelUsageStr)
+          .input('primaryModels', sql.NVarChar(500), primaryModelsStr)
+          .input('fallbackUsed', sql.NVarChar(10), fallbackUsedStr)
+          .input('fallbackCount', sql.Int, fallbackCount)
           .query(`
-            INSERT INTO analysis_records (ticker, recommendation, summary, full_report_json)
-            VALUES (@ticker, @rec, @summary, @report);
+            INSERT INTO analysis_records (ticker, recommendation, summary, full_report_json, model_usage, primary_models, fallback_used, fallback_count)
+            VALUES (@ticker, @rec, @summary, @report, @modelUsage, @primaryModels, @fallbackUsed, @fallbackCount);
             SELECT SCOPE_IDENTITY() as id
           `)
         insertedId = Number(result.recordset[0]?.id ?? -1)
@@ -706,10 +730,10 @@ export async function saveAnalysisRecord(record: {
     if (db) {
       try {
         const stmt = db.prepare(`
-          INSERT INTO analysis_records (ticker, recommendation, summary, full_report_json)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO analysis_records (ticker, recommendation, summary, full_report_json, model_usage, primary_models, fallback_used, fallback_count)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `)
-        const info = stmt.run(record.ticker, record.recommendation || 'Hold', summaryStr, reportJson)
+        const info = stmt.run(record.ticker, record.recommendation || 'Hold', summaryStr, reportJson, modelUsageStr, primaryModelsStr, fallbackUsedStr, fallbackCount)
         insertedId = Number(info.lastInsertRowid)
       } catch (e) {
         console.error('[SQLite] saveAnalysisRecord error:', e)
@@ -721,6 +745,10 @@ export async function saveAnalysisRecord(record: {
   memoryStore.unshift({
     id, ticker: record.ticker, recommendation: record.recommendation,
     summary: summaryStr, full_report_json: reportJson, created_at: nowStr,
+    model_usage: modelUsageStr ?? undefined,
+    primary_models: primaryModelsStr ?? undefined,
+    fallback_used: fallbackUsedStr,
+    fallback_count: fallbackCount,
   })
   return id
 }
@@ -737,13 +765,13 @@ export async function getAnalysisRecords(limit: number = 20, symbol?: string): P
         if (cleanSymbol) {
           req.input('pattern', sql.NVarChar(50), `%${cleanSymbol}%`)
           const result = await req.query(`
-            SELECT TOP (@limit) id, ticker, recommendation, summary, full_report_json, created_at
+            SELECT TOP (@limit) id, ticker, recommendation, summary, full_report_json, model_usage, primary_models, fallback_used, fallback_count, created_at
             FROM analysis_records WHERE UPPER(ticker) LIKE @pattern ORDER BY id DESC
           `)
           return result.recordset as AnalysisRecord[]
         }
         const result = await req.query(`
-          SELECT TOP (@limit) id, ticker, recommendation, summary, full_report_json, created_at
+          SELECT TOP (@limit) id, ticker, recommendation, summary, full_report_json, model_usage, primary_models, fallback_used, fallback_count, created_at
           FROM analysis_records ORDER BY id DESC
         `)
         return result.recordset as AnalysisRecord[]
@@ -757,12 +785,12 @@ export async function getAnalysisRecords(limit: number = 20, symbol?: string): P
       try {
         if (cleanSymbol) {
           return db.prepare(`
-            SELECT id, ticker, recommendation, summary, full_report_json, created_at
+            SELECT id, ticker, recommendation, summary, full_report_json, model_usage, primary_models, fallback_used, fallback_count, created_at
             FROM analysis_records WHERE UPPER(ticker) LIKE ? ORDER BY id DESC LIMIT ?
           `).all(`%${cleanSymbol}%`, limit) as AnalysisRecord[]
         }
         return db.prepare(`
-          SELECT id, ticker, recommendation, summary, full_report_json, created_at
+          SELECT id, ticker, recommendation, summary, full_report_json, model_usage, primary_models, fallback_used, fallback_count, created_at
           FROM analysis_records ORDER BY id DESC LIMIT ?
         `).all(limit) as AnalysisRecord[]
       } catch (e) {
@@ -784,7 +812,7 @@ export async function getAnalysisRecordById(id: number): Promise<AnalysisRecord 
       try {
         const result = await pool.request()
           .input('id', sql.Int, id)
-          .query(`SELECT id, ticker, recommendation, summary, full_report_json, created_at FROM analysis_records WHERE id = @id`)
+          .query(`SELECT id, ticker, recommendation, summary, full_report_json, model_usage, primary_models, fallback_used, fallback_count, created_at FROM analysis_records WHERE id = @id`)
         return result.recordset[0] as AnalysisRecord | undefined
       } catch (e) {
         console.error('[AzureSQL] getAnalysisRecordById error:', e)
@@ -795,7 +823,7 @@ export async function getAnalysisRecordById(id: number): Promise<AnalysisRecord 
     if (db) {
       try {
         return db.prepare(`
-          SELECT id, ticker, recommendation, summary, full_report_json, created_at
+          SELECT id, ticker, recommendation, summary, full_report_json, model_usage, primary_models, fallback_used, fallback_count, created_at
           FROM analysis_records WHERE id = ?
         `).get(id) as AnalysisRecord | undefined
       } catch (e) {

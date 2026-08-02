@@ -1,7 +1,13 @@
-import type { LLMClient, LLMUsage } from './client.js'
+import type { LLMCallInfo, LLMClient, LLMUsage } from './client.js'
 
 export interface AgentUsage {
   agent: string
+  /** Model that served the agent's calls (primary or fallback). */
+  model: string | null
+  /** Whether any call for this agent fell back to the secondary model. */
+  usedFallback: boolean
+  /** Number of calls that engaged the fallback model. */
+  fallbackCalls: number
   promptTokens: number
   completionTokens: number
   totalTokens: number
@@ -16,8 +22,15 @@ export interface TokenUsageSummary {
   }
 }
 
+interface AgentState {
+  promptTokens: number
+  completionTokens: number
+  model: string | null
+  fallbackCalls: number
+}
+
 export class LLMUsageTracker {
-  private byAgent = new Map<string, { promptTokens: number; completionTokens: number }>()
+  private byAgent = new Map<string, AgentState>()
   private currentAgent = 'Unknown'
 
   reset() {
@@ -29,18 +42,29 @@ export class LLMUsageTracker {
     this.currentAgent = agent
   }
 
+  private getOrInit(agent: string): AgentState {
+    const current = this.byAgent.get(agent)
+    if (current) return current
+    const fresh: AgentState = { promptTokens: 0, completionTokens: 0, model: null, fallbackCalls: 0 }
+    this.byAgent.set(agent, fresh)
+    return fresh
+  }
+
   private handleUsage = (usage: LLMUsage) => {
-    const prompt = usage.promptTokens ?? 0
-    const completion = usage.completionTokens ?? 0
-    const current = this.byAgent.get(this.currentAgent) ?? { promptTokens: 0, completionTokens: 0 }
-    this.byAgent.set(this.currentAgent, {
-      promptTokens: current.promptTokens + prompt,
-      completionTokens: current.completionTokens + completion,
-    })
+    const current = this.getOrInit(this.currentAgent)
+    current.promptTokens += usage.promptTokens ?? 0
+    current.completionTokens += usage.completionTokens ?? 0
+  }
+
+  private handleCall = (info: LLMCallInfo) => {
+    const current = this.getOrInit(this.currentAgent)
+    current.model = info.model
+    if (info.usedFallback) current.fallbackCalls++
   }
 
   attach(client: LLMClient): LLMClient {
     client.onUsage = this.handleUsage
+    client.onCall = this.handleCall
     return client
   }
 
@@ -51,7 +75,15 @@ export class LLMUsageTracker {
 
     for (const [agent, usage] of this.byAgent) {
       const totalTokens = usage.promptTokens + usage.completionTokens
-      agents.push({ agent, ...usage, totalTokens })
+      agents.push({
+        agent,
+        model: usage.model,
+        usedFallback: usage.fallbackCalls > 0,
+        fallbackCalls: usage.fallbackCalls,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens,
+      })
       totalPrompt += usage.promptTokens
       totalCompletion += usage.completionTokens
     }

@@ -48,6 +48,16 @@ async function resolveSymbol(rawTicker: string): Promise<string> {
 
 export type ProgressCallback = (step: string, detail: string) => void
 
+export interface ModelPlan {
+  deep: string
+  quick: string
+  fallback: {
+    provider: string
+    deep: string
+    quick: string
+  } | null
+}
+
 export class TradingEngine {
   private deepLLM: LLMClient
   private quickLLM: LLMClient
@@ -55,6 +65,7 @@ export class TradingEngine {
   private reflector: Reflector
   private signalProcessor = new SignalProcessor()
   private usageTracker = new LLMUsageTracker()
+  private modelPlan: ModelPlan
 
   constructor() {
     registry.register(yahooFinanceProvider)
@@ -72,11 +83,23 @@ export class TradingEngine {
     this.quickLLM = createClient(config.quickThinkModel)
 
     const fallbackProvider = process.env.FALLBACK_LLM_PROVIDER
+    let fallbackPlan: ModelPlan['fallback'] = null
     if (fallbackProvider) {
       const fallbackDeepModel = process.env.FALLBACK_DEEP_THINK_MODEL ?? 'gemini-2.5-flash'
       const fallbackQuickModel = process.env.FALLBACK_QUICK_THINK_MODEL ?? 'gemini-2.5-flash'
       this.deepLLM = new FallbackClient(this.deepLLM, createClient(fallbackDeepModel, fallbackProvider))
       this.quickLLM = new FallbackClient(this.quickLLM, createClient(fallbackQuickModel, fallbackProvider))
+      fallbackPlan = {
+        provider: fallbackProvider,
+        deep: fallbackDeepModel,
+        quick: fallbackQuickModel,
+      }
+    }
+
+    this.modelPlan = {
+      deep: config.deepThinkModel,
+      quick: config.quickThinkModel,
+      fallback: fallbackPlan,
     }
 
     this.deepLLM = this.usageTracker.attach(this.deepLLM)
@@ -84,6 +107,11 @@ export class TradingEngine {
 
     this.memory = new MemoryLog(config.memoryLogPath)
     this.reflector = new Reflector(this.quickLLM)
+  }
+
+  /** 回傳每個 agent 階層所設定的 primary/fallback 模型清單，用於 DB 記錄與 UI 呈現。 */
+  getModelPlan(): ModelPlan {
+    return this.modelPlan
   }
 
   async analyze(
