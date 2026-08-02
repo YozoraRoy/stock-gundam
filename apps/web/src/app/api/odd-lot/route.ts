@@ -47,10 +47,10 @@ export async function GET(req: Request) {
            g.last_buy_date
     FROM odd_lot_trades t
     LEFT JOIN (
-      SELECT stock_id, gift_name, meeting_date, distribution_method, last_buy_date
+      SELECT stock_id, gift_name, meeting_date, distribution_method, last_buy_date,
+             ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
       FROM shareholder_gifts
-      GROUP BY stock_id
-    ) g ON g.stock_id = t.stock_id
+    ) g ON g.stock_id = t.stock_id AND g.rn = 1
     WHERE t.date = @date
     ORDER BY t.volume DESC
     LIMIT 1500

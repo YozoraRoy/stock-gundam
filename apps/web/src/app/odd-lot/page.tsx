@@ -1,24 +1,26 @@
+import { unstable_cache } from 'next/cache'
 import { dbQueryAll, dbQueryFirst, ensureSeedData, hasDb } from '@stock/database'
 import { OddLotView, type OddLotItem } from '@/components/odd-lot-view'
 import { Gift, Sparkles, TrendingUp } from 'lucide-react'
 import { yahooFinanceProvider } from '@stock/market-data'
 import { MarketDataError } from '@stock/core'
-
-import SEEDED_ODD_LOTS from '@/data/seeded-odd-lots.json'
-
-const FALLBACK_ODD_LOTS: OddLotItem[] = SEEDED_ODD_LOTS as OddLotItem[]
-
 import {
   formatTradingDayWithWeekday,
   isCurrentlyHolidayOrWeekend,
 } from '@/utils/taiwan-calendar'
 
-export default async function OddLotPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; stock_id?: string }>
-}) {
-  const params = await searchParams
+import SEEDED_ODD_LOTS from '@/data/seeded-odd-lots.json'
+
+const FALLBACK_ODD_LOTS: OddLotItem[] = SEEDED_ODD_LOTS as OddLotItem[]
+
+const MAX_PRICE_LOOKUPS = 50
+
+interface OddLotData {
+  trades: OddLotItem[]
+  latestDate: string
+}
+
+async function loadOddLotData(stockId: string): Promise<OddLotData> {
   try {
     await ensureSeedData()
   } catch (e) {
@@ -37,18 +39,18 @@ export default async function OddLotPage({
       if (latestDate) {
         latestDateStr = latestDate.date
 
-        if (params.stock_id) {
-          const sid = params.stock_id.toUpperCase()
+        if (stockId) {
+          const sid = stockId.toUpperCase()
           trades = await dbQueryAll<OddLotItem>(
             `
             SELECT t.date, t.stock_id, t.stock_name, t.price, t.volume, t.bid_price, t.bid_volume, t.ask_price, t.ask_volume,
                    g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method
             FROM odd_lot_trades t
             LEFT JOIN (
-              SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method
+              SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method,
+                     ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
               FROM shareholder_gifts
-              GROUP BY stock_id
-            ) g ON g.stock_id = t.stock_id
+            ) g ON g.stock_id = t.stock_id AND g.rn = 1
             WHERE t.stock_id = @stock_id
             ORDER BY t.date DESC
             LIMIT 30
@@ -62,10 +64,10 @@ export default async function OddLotPage({
                    g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method
             FROM odd_lot_trades t
             LEFT JOIN (
-              SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method
+              SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method,
+                     ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
               FROM shareholder_gifts
-              GROUP BY stock_id
-            ) g ON g.stock_id = t.stock_id
+            ) g ON g.stock_id = t.stock_id AND g.rn = 1
             WHERE t.date = @date
             ORDER BY t.volume DESC
             LIMIT 1500
@@ -84,14 +86,18 @@ export default async function OddLotPage({
     latestDateStr = displayItems[0].date
   }
 
-  // currentPrice fallback — fetch live price for stocks without odd-lot trade data
+  // currentPrice fallback — fetch live price for stocks without odd-lot trade data (capped)
   const itemsNeedingPrice = displayItems.filter(
     (item) => !item.price || item.price <= 0 || isNaN(item.price)
   )
   if (itemsNeedingPrice.length > 0) {
     const stockIds = [...new Set(itemsNeedingPrice.map((item) => item.stock_id))]
+    const capped = stockIds.slice(0, MAX_PRICE_LOOKUPS)
+    if (capped.length < stockIds.length) {
+      console.warn(`[OddLotPage] Capping price lookups to ${capped.length}/${stockIds.length}`)
+    }
     await Promise.all(
-      stockIds.map(async (sid) => {
+      capped.map(async (sid) => {
         try {
           const quote = await yahooFinanceProvider.getQuote(`${sid}.TW`, 'TW')
           if (quote?.price && quote.price > 0) {
@@ -110,6 +116,27 @@ export default async function OddLotPage({
       })
     )
   }
+
+  return { trades: displayItems, latestDate: latestDateStr }
+}
+
+// 5 分鐘伺服器端資料快取：5 分鐘內再次瀏覽不會重跑 DB/Yahoo 查詢
+const getCachedOddLotData = unstable_cache(
+  (stockId: string) => loadOddLotData(stockId),
+  ['odd-lot-data'],
+  { revalidate: 300, tags: ['odd-lot'] },
+)
+
+export default async function OddLotPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; stock_id?: string }>
+}) {
+  const params = await searchParams
+  const stockId = (params.stock_id ?? '').trim()
+  const initialQuery = params.q ?? params.stock_id ?? ''
+
+  const { trades: displayItems, latestDate: latestDateStr } = await getCachedOddLotData(stockId)
 
   const holidayInfo = isCurrentlyHolidayOrWeekend()
   const formattedLatestDate = formatTradingDayWithWeekday(latestDateStr)
@@ -151,7 +178,7 @@ export default async function OddLotPage({
       <OddLotView
         initialItems={displayItems}
         latestDate={latestDateStr}
-        initialQuery={params.stock_id ?? params.q ?? ''}
+        initialQuery={initialQuery}
       />
     </div>
   )

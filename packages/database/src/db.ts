@@ -249,6 +249,17 @@ export function hasDb(): boolean {
 }
 
 /**
+ * Azure SQL (T-SQL) has no LIMIT clause — translate `... LIMIT n` to `SELECT TOP (n) ...`.
+ * SQLite keeps native LIMIT. Only applies when a trailing LIMIT n is present.
+ */
+export function translateLimitForAzure(sqlStr: string): string {
+  return sqlStr.replace(
+    /^\s*(SELECT\s+)(.*)\s+LIMIT\s+(\d+)\s*;?\s*$/is,
+    (_all, select, rest, n) => `SELECT TOP (${n}) ${rest}`,
+  )
+}
+
+/**
  * Query all rows. Works with both SQLite and Azure SQL.
  */
 export async function dbQueryAll<T = any>(sqlStr: string, params?: Record<string, any>): Promise<T[]> {
@@ -261,7 +272,7 @@ export async function dbQueryAll<T = any>(sqlStr: string, params?: Record<string
         req.input(k, v ?? null)
       }
     }
-    const result = await req.query(sqlStr)
+    const result = await req.query(translateLimitForAzure(sqlStr))
     return result.recordset
   }
 
@@ -287,7 +298,7 @@ export async function dbQueryFirst<T = any>(sqlStr: string, params?: Record<stri
         req.input(k, v ?? null)
       }
     }
-    const result = await req.query(sqlStr)
+    const result = await req.query(translateLimitForAzure(sqlStr))
     return result.recordset[0] as T | undefined
   }
 
@@ -686,14 +697,14 @@ export async function getAnalysisRecords(limit: number = 20, symbol?: string): P
         if (cleanSymbol) {
           req.input('pattern', sql.NVarChar(50), `%${cleanSymbol}%`)
           const result = await req.query(`
-            SELECT id, ticker, recommendation, summary, full_report_json, created_at
-            FROM analysis_records WHERE UPPER(ticker) LIKE @pattern ORDER BY id DESC LIMIT @limit
+            SELECT TOP (@limit) id, ticker, recommendation, summary, full_report_json, created_at
+            FROM analysis_records WHERE UPPER(ticker) LIKE @pattern ORDER BY id DESC
           `)
           return result.recordset as AnalysisRecord[]
         }
         const result = await req.query(`
-          SELECT id, ticker, recommendation, summary, full_report_json, created_at
-          FROM analysis_records ORDER BY id DESC LIMIT @limit
+          SELECT TOP (@limit) id, ticker, recommendation, summary, full_report_json, created_at
+          FROM analysis_records ORDER BY id DESC
         `)
         return result.recordset as AnalysisRecord[]
       } catch (e) {
