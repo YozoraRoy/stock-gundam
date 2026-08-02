@@ -1,5 +1,5 @@
 import { unstable_cache } from 'next/cache'
-import { dbQueryAll, dbQueryFirst, ensureSeedData, hasDb } from '@stock/database'
+import { dbQueryAll, dbQueryFirst, ensureSeedData } from '@stock/database'
 import { OddLotView, type OddLotItem } from '@/components/odd-lot-view'
 import { Gift, Sparkles, TrendingUp } from 'lucide-react'
 import { yahooFinanceProvider } from '@stock/market-data'
@@ -20,74 +20,9 @@ interface OddLotData {
   latestDate: string
 }
 
-async function loadOddLotData(stockId: string): Promise<OddLotData> {
-  try {
-    await ensureSeedData()
-  } catch (e) {
-    console.error('[OddLotPage] ensureSeedData failed:', e)
-  }
-
-  let trades: OddLotItem[] = []
-  let latestDateStr = ''
-
-  if (hasDb()) {
-    try {
-      const latestDate = await dbQueryFirst<{ date: string }>(
-        'SELECT date FROM odd_lot_trades ORDER BY date DESC LIMIT 1',
-      )
-
-      if (latestDate) {
-        latestDateStr = latestDate.date
-
-        if (stockId) {
-          const sid = stockId.toUpperCase()
-          trades = await dbQueryAll<OddLotItem>(
-            `
-            SELECT t.date, t.stock_id, t.stock_name, t.price, t.volume, t.bid_price, t.bid_volume, t.ask_price, t.ask_volume,
-                   g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method
-            FROM odd_lot_trades t
-            LEFT JOIN (
-              SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method,
-                     ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
-              FROM shareholder_gifts
-            ) g ON g.stock_id = t.stock_id AND g.rn = 1
-            WHERE t.stock_id = @stock_id
-            ORDER BY t.date DESC
-            LIMIT 30
-          `,
-            { stock_id: sid },
-          )
-        } else {
-          trades = await dbQueryAll<OddLotItem>(
-            `
-            SELECT t.date, t.stock_id, t.stock_name, t.price, t.volume, t.bid_price, t.bid_volume, t.ask_price, t.ask_volume,
-                   g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method
-            FROM odd_lot_trades t
-            LEFT JOIN (
-              SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method,
-                     ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
-              FROM shareholder_gifts
-            ) g ON g.stock_id = t.stock_id AND g.rn = 1
-            WHERE t.date = @date
-            ORDER BY t.volume DESC
-            LIMIT 1500
-          `,
-            { date: latestDateStr },
-          )
-        }
-      }
-    } catch (e) {
-      console.error('[OddLotPage] Failed to query database:', e)
-    }
-  }
-
-  const displayItems = trades.length > 0 ? trades : FALLBACK_ODD_LOTS
-  if (!latestDateStr && displayItems.length > 0) {
-    latestDateStr = displayItems[0].date
-  }
-
-  // currentPrice fallback — fetch live price for stocks without odd-lot trade data (capped)
-  const itemsNeedingPrice = displayItems.filter(
+// currentPrice fallback — fetch live price for stocks without odd-lot trade data (capped)
+async function enrichPrices(items: OddLotItem[]): Promise<OddLotItem[]> {
+  const itemsNeedingPrice = items.filter(
     (item) => !item.price || item.price <= 0 || isNaN(item.price)
   )
   if (itemsNeedingPrice.length > 0) {
@@ -102,7 +37,7 @@ async function loadOddLotData(stockId: string): Promise<OddLotData> {
           const quote = await yahooFinanceProvider.getQuote(`${sid}.TW`, 'TW')
           if (quote?.price && quote.price > 0) {
             const currentPrice = quote.price
-            displayItems.forEach((item) => {
+            items.forEach((item) => {
               if (item.stock_id === sid) {
                 item.current_price = currentPrice
               }
@@ -116,8 +51,59 @@ async function loadOddLotData(stockId: string): Promise<OddLotData> {
       })
     )
   }
+  return items
+}
 
-  return { trades: displayItems, latestDate: latestDateStr }
+// 從 DB 讀取真實資料。DB 不可用時直接 throw（避免 unstable_cache 把 seed fallback 快取 5 分鐘）。
+async function loadOddLotData(stockId: string): Promise<OddLotData> {
+  try {
+    await ensureSeedData()
+  } catch (e) {
+    console.error('[OddLotPage] ensureSeedData failed:', e)
+  }
+
+  const latestDate = await dbQueryFirst<{ date: string }>(
+    'SELECT date FROM odd_lot_trades ORDER BY date DESC LIMIT 1',
+  )
+  if (!latestDate) {
+    throw new Error('odd_lot_trades unavailable')
+  }
+
+  const trades = stockId
+    ? await dbQueryAll<OddLotItem>(
+        `
+        SELECT t.date, t.stock_id, t.stock_name, t.price, t.volume, t.bid_price, t.bid_volume, t.ask_price, t.ask_volume,
+               g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method
+        FROM odd_lot_trades t
+        LEFT JOIN (
+          SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method,
+                 ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
+          FROM shareholder_gifts
+        ) g ON g.stock_id = t.stock_id AND g.rn = 1
+        WHERE t.stock_id = @stock_id
+        ORDER BY t.date DESC
+        LIMIT 30
+      `,
+        { stock_id: stockId.toUpperCase() },
+      )
+    : await dbQueryAll<OddLotItem>(
+        `
+        SELECT t.date, t.stock_id, t.stock_name, t.price, t.volume, t.bid_price, t.bid_volume, t.ask_price, t.ask_volume,
+               g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method
+        FROM odd_lot_trades t
+        LEFT JOIN (
+          SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method,
+                 ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
+          FROM shareholder_gifts
+        ) g ON g.stock_id = t.stock_id AND g.rn = 1
+        WHERE t.date = @date
+        ORDER BY t.volume DESC
+        LIMIT 1500
+      `,
+        { date: latestDate.date },
+      )
+
+  return { trades: await enrichPrices(trades), latestDate: latestDate.date }
 }
 
 // 5 分鐘伺服器端資料快取：5 分鐘內再次瀏覽不會重跑 DB/Yahoo 查詢
@@ -136,7 +122,23 @@ export default async function OddLotPage({
   const stockId = (params.stock_id ?? '').trim()
   const initialQuery = params.q ?? params.stock_id ?? ''
 
-  const { trades: displayItems, latestDate: latestDateStr } = await getCachedOddLotData(stockId)
+  let displayItems: OddLotItem[] = []
+  let latestDateStr = ''
+  try {
+    const data = await getCachedOddLotData(stockId)
+    displayItems = data.trades
+    latestDateStr = data.latestDate
+  } catch (e) {
+    // DB 不可用：改用 seed fallback（不經快取，避免把 fallback 塞進 unstable_cache）
+    console.error('[OddLotPage] DB unavailable, using seed fallback:', e)
+    displayItems = stockId
+      ? FALLBACK_ODD_LOTS.filter((item) => item.stock_id.toUpperCase() === stockId.toUpperCase())
+      : FALLBACK_ODD_LOTS
+    await enrichPrices(displayItems)
+    if (displayItems.length > 0) {
+      latestDateStr = displayItems[0].date
+    }
+  }
 
   const holidayInfo = isCurrentlyHolidayOrWeekend()
   const formattedLatestDate = formatTradingDayWithWeekday(latestDateStr)
