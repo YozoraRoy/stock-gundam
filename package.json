@@ -16,7 +16,9 @@
     "seed:odd-lot": "npm run seed:odd-lot --workspace=packages/database",
     "seed:gifts": "npm run seed:gifts --workspace=packages/database",
     "db:migrate": "npm run migrate --workspace=packages/database",
-    "db:scheduler": "npm run scheduler --workspace=packages/database"
+    "db:scheduler": "npm run scheduler --workspace=packages/database",
+    "sync:stockgift": "npm run sync:stockgift --workspace=packages/database",
+    "sync:mops": "npm run sync:mops --workspace=packages/database"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

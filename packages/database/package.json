@@ -12,7 +12,9 @@
     "seed:odd-lot": "npx tsx seed/fetch-odd-lot.ts",
     "seed:gifts": "npx tsx seed/fetch-gifts.ts",
     "migrate": "npx tsx seed/migrate.ts",
-    "scheduler": "npx tsx seed/scheduler.ts"
+    "scheduler": "npx tsx seed/scheduler.ts",
+    "sync:stockgift": "npx tsx src/sync-stockgift.ts",
+    "sync:mops": "npx tsx src/sync-mops.ts"
   },
   "dependencies": {
     "@stock/core": "*",

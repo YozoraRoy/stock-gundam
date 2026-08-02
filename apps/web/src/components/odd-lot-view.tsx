@@ -42,6 +42,10 @@ export interface OddLotItem {
   last_buy_date?: string | null
   distribution_method?: string | null
   current_price?: number | null
+  gift_status?: string | null
+  claim_rule?: string | null
+  claim_rule_source?: string | null
+  mops_gift_text?: string | null
 }
 
 export type GiftCategory = 'ALL' | 'EGIFT' | 'CARD' | 'KITCHEN' | 'CARE' | 'LIFESTYLE' | 'PENDING' | 'NO_GIFT' | 'OTHER'
@@ -280,11 +284,48 @@ export function formatCpRatio(ratio: number): { label: string; badgeClass: strin
 
 export type RestrictionStatus = 'ALLOW_AGENT' | 'REQUIRE_EVOTE_OR_ATTEND' | 'NO_ODD_LOT_GIFT' | 'UNKNOWN'
 
-export function getOddLotRestriction(giftName?: string | null, distributionMethod?: string | null): {
+// MOPS 官方公告分類 → 領取限制。claimRule 來自公開資訊觀測站股東會召集公告。
+const OFFICIAL_RULE_MAP: Record<string, { status: RestrictionStatus; label: string; badgeClass: string }> = {
+  ONE_SHARE: {
+    status: 'ALLOW_AGENT',
+    label: '✅ 1股可領',
+    badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+  },
+  FULL_LOT: {
+    status: 'NO_ODD_LOT_GIFT',
+    label: '❌ 需滿千股',
+    badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+  },
+  NO_GIFT: {
+    status: 'NO_ODD_LOT_GIFT',
+    label: '➖ 無紀念品',
+    badgeClass: 'bg-white/5 text-white/40 border-white/15',
+  },
+  MEETING_ONLY: {
+    status: 'REQUIRE_EVOTE_OR_ATTEND',
+    label: '⚠️ 需出席/電投',
+    badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  },
+}
+
+export function getOddLotRestriction(
+  giftName?: string | null,
+  distributionMethod?: string | null,
+  claimRule?: string | null,
+  claimRuleSource?: string | null,
+): {
   status: RestrictionStatus
   label: string
   badgeClass: string
+  source: string
+  officialText?: string | null
 } {
+  // 優先採用 MOPS 官方公告分類（僅在拿到非 UNKNOWN 的官方規則時）
+  if (claimRule && claimRuleSource === 'MOPS' && claimRule !== 'UNKNOWN' && OFFICIAL_RULE_MAP[claimRule]) {
+    const cfg = OFFICIAL_RULE_MAP[claimRule]
+    return { ...cfg, source: 'MOPS' }
+  }
+
   const text = `${giftName || ''} ${distributionMethod || ''}`.toLowerCase()
 
   if (text.includes('親領') || text.includes('電子投票') || text.includes('電投') || text.includes('出席')) {
@@ -292,6 +333,7 @@ export function getOddLotRestriction(giftName?: string | null, distributionMetho
       status: 'REQUIRE_EVOTE_OR_ATTEND',
       label: '⚠️ 需電投/親領',
       badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      source: '推估',
     }
   }
   if (text.includes('不發') || text.includes('滿一張')) {
@@ -299,6 +341,7 @@ export function getOddLotRestriction(giftName?: string | null, distributionMetho
       status: 'NO_ODD_LOT_GIFT',
       label: '❌ 零股不發放',
       badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+      source: '推估',
     }
   }
   if (!giftName || giftName === '-' || giftName === '待公告' || classifyGift(giftName) === 'NO_GIFT') {
@@ -306,6 +349,7 @@ export function getOddLotRestriction(giftName?: string | null, distributionMetho
       status: 'UNKNOWN',
       label: '⏳ 待公告',
       badgeClass: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+      source: '推估',
     }
   }
 
@@ -313,6 +357,7 @@ export function getOddLotRestriction(giftName?: string | null, distributionMetho
     status: 'ALLOW_AGENT',
     label: '✅ 零股可代領',
     badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    source: '推估',
   }
 }
 
@@ -584,7 +629,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
 
       // 僅顯示零股可代領
       if (onlyAllowAgent) {
-        const rest = getOddLotRestriction(item.gift_name, item.distribution_method)
+        const rest = getOddLotRestriction(item.gift_name, item.distribution_method, item.claim_rule, item.claim_rule_source)
         if (rest.status !== 'ALLOW_AGENT') return false
       }
 
@@ -654,8 +699,8 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
           )
         case 'restriction':
           return (
-            getOddLotRestriction(a.gift_name, a.distribution_method).status.localeCompare(
-              getOddLotRestriction(b.gift_name, b.distribution_method).status
+            getOddLotRestriction(a.gift_name, a.distribution_method, a.claim_rule, a.claim_rule_source).status.localeCompare(
+              getOddLotRestriction(b.gift_name, b.distribution_method, b.claim_rule, b.claim_rule_source).status
             ) * modifier
           )
         default:
@@ -1108,10 +1153,25 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                       {/* 🎫 1股領取限制 */}
                       <td className="px-4 py-3.5 whitespace-nowrap text-xs">
                         {(() => {
-                          const { label, badgeClass } = getOddLotRestriction(giftName, item.distribution_method)
+                          const { label, badgeClass, source, officialText } = getOddLotRestriction(
+                            giftName,
+                            item.distribution_method,
+                            item.claim_rule,
+                            item.claim_rule_source,
+                          )
+                          const tip =
+                            source === 'MOPS'
+                              ? `來源：MOPS 官方股東會公告${officialText ? `\n${officialText}` : ''}`
+                              : '來源：依紀念品文字推估，請以官方公告為準'
                           return (
-                            <span className={`px-2.5 py-0.5 rounded-full border font-medium text-xs ${badgeClass}`}>
+                            <span
+                              title={tip}
+                              className={`px-2.5 py-0.5 rounded-full border font-medium text-xs ${badgeClass}`}
+                            >
                               {label}
+                              <span className="ml-1 opacity-70 text-[10px]">
+                                {source === 'MOPS' ? '官方' : '估'}
+                              </span>
                             </span>
                           )
                         })()}

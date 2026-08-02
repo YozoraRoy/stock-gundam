@@ -63,6 +63,13 @@ function getSqliteDb(): Database.Database | null {
         meeting_date TEXT,
         last_buy_date TEXT,
         gift_name TEXT,
+        gift_status TEXT,
+        claim_rule TEXT,
+        claim_rule_source TEXT,
+        mops_gift_text TEXT,
+        mops_meeting_date TEXT,
+        mops_source_url TEXT,
+        mops_updated_at TEXT,
         distribution_method TEXT,
         distribution_location TEXT,
         source_url TEXT,
@@ -175,6 +182,13 @@ async function getAzurePool(): Promise<sql.ConnectionPool | null> {
           meeting_date         NVARCHAR(20),
           last_buy_date        NVARCHAR(20),
           gift_name            NVARCHAR(500),
+          gift_status          NVARCHAR(50),
+          claim_rule           NVARCHAR(50),
+          claim_rule_source    NVARCHAR(50),
+          mops_gift_text       NVARCHAR(MAX),
+          mops_meeting_date    NVARCHAR(50),
+          mops_source_url      NVARCHAR(1000),
+          mops_updated_at      NVARCHAR(50),
           distribution_method  NVARCHAR(200),
           distribution_location NVARCHAR(500),
           source_url           NVARCHAR(1000),
@@ -562,7 +576,18 @@ async function migrateAzure(): Promise<void> {
         const raw = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8')
         const batches = raw.split(/\bGO\b/i).filter(b => b.trim())
         for (const batch of batches) {
-          if (batch.trim()) await pool.request().query(batch)
+          if (!batch.trim()) continue
+          try {
+            await pool.request().query(batch)
+          } catch (e: any) {
+            const msg = String(e?.message ?? e).toLowerCase()
+            const isDup =
+              e?.number === 2705 ||
+              e?.number === 4928 ||
+              (msg.includes('already exists') && msg.includes('column'))
+            if (!isDup) throw e
+            console.log(`[AzureSQL] migration ${file}: column already exists, skipping statement`)
+          }
         }
         await pool.request()
           .input('name', sql.NVarChar(200), file)
@@ -599,7 +624,22 @@ function migrateSqlite(): void {
       for (const file of migrationFiles) {
         if (applied.has(file)) continue
         const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8')
-        db.exec(sql)
+        const statements = sql
+          .split(';')
+          .map(s => s.trim())
+          .filter(s => s.length > 0)
+        for (const stmt of statements) {
+          try {
+            db.exec(stmt)
+          } catch (e: any) {
+            const msg = String(e?.message ?? e).toLowerCase()
+            if (msg.includes('duplicate column name')) {
+              console.log(`[SQLite] migration ${file}: column already exists, skipping statement`)
+              continue
+            }
+            throw e
+          }
+        }
         insert.run(file)
         console.log(`Applied migration: ${file}`)
       }

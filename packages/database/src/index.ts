@@ -7,5 +7,14 @@ export {
 export type { AnalysisRecord, HistoricalGift } from './db.js'
 export type { Database } from 'better-sqlite3'
 export { fetchTwseOddLots } from './fetchers/twse-odd-lot.js'
-export { fetchStockGift } from './fetchers/stock-gift.js'
+export { fetchStockGift, fetchStockGiftRows } from './fetchers/stock-gift.js'
+export type { GiftRow } from './fetchers/stock-gift.js'
+export {
+  fetchMopsMeetings,
+  fetchMopsAnnouncementText,
+  classifyClaimRule,
+  rocToMonthDay,
+  extractGiftEvidence,
+} from './fetchers/mops.js'
+export type { MopsMeeting, ClaimRule, ClaimResult } from './fetchers/mops.js'
 

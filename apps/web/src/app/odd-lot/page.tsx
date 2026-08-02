@@ -73,10 +73,12 @@ async function loadOddLotData(stockId: string): Promise<OddLotData> {
     ? await dbQueryAll<OddLotItem>(
         `
         SELECT t.date, t.stock_id, t.stock_name, t.price, t.volume, t.bid_price, t.bid_volume, t.ask_price, t.ask_volume,
-               g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method
+               g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method,
+               g.gift_status, g.claim_rule, g.claim_rule_source, g.mops_gift_text
         FROM odd_lot_trades t
         LEFT JOIN (
           SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method,
+                 gift_status, claim_rule, claim_rule_source, mops_gift_text,
                  ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
           FROM shareholder_gifts
         ) g ON g.stock_id = t.stock_id AND g.rn = 1
@@ -89,10 +91,12 @@ async function loadOddLotData(stockId: string): Promise<OddLotData> {
     : await dbQueryAll<OddLotItem>(
         `
         SELECT t.date, t.stock_id, t.stock_name, t.price, t.volume, t.bid_price, t.bid_volume, t.ask_price, t.ask_volume,
-               g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method
+               g.gift_name, g.meeting_date, g.last_buy_date, g.distribution_method,
+               g.gift_status, g.claim_rule, g.claim_rule_source, g.mops_gift_text
         FROM odd_lot_trades t
         LEFT JOIN (
           SELECT stock_id, gift_name, meeting_date, last_buy_date, distribution_method,
+                 gift_status, claim_rule, claim_rule_source, mops_gift_text,
                  ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
           FROM shareholder_gifts
         ) g ON g.stock_id = t.stock_id AND g.rn = 1
