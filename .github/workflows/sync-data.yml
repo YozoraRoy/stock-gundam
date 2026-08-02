@@ -2,8 +2,10 @@ name: Sync gift data (stock.gift + MOPS)
 
 on:
   schedule:
-    # 台灣時間 02:30 每日 (UTC 18:30)
+    # 每日 台灣時間 02:30 (UTC 18:30) — 增量 (missing-only)
     - cron: '30 18 * * *'
+    # 每週一 台灣時間 02:30 (UTC 18:30 週一) — 全量重跑一次
+    - cron: '30 18 * * 1'
   workflow_dispatch:
 
 jobs:
@@ -28,4 +30,11 @@ jobs:
         run: npm run sync:stockgift --workspace=packages/database
 
       - name: Sync MOPS claim rules (official announcements)
-        run: npm run sync:mops --workspace=packages/database
+        run: |
+          if [ "$(date -u +%u)" = "1" ]; then
+            echo "== Monday: full MOPS sync =="
+            npm run sync:mops --workspace=packages/database
+          else
+            echo "== Daily: incremental MOPS sync (missing-only) =="
+            npm run sync:mops:missing --workspace=packages/database
+          fi
