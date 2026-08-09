@@ -89,6 +89,15 @@ function AnalyzeContent() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: res.statusText }))
+        if (res.status === 401) {
+          const redirectUrl = `/login?redirect=${encodeURIComponent(`/analyze?symbol=${encodeURIComponent(symbol)}`)}`
+          window.location.href = redirectUrl
+          return
+        }
+        if (res.status === 429) {
+          setError(body.error || `今日額度已用完 (${body.quota?.used ?? 10}/10)`)
+          return
+        }
         throw new Error(body.error || `HTTP ${res.status}`)
       }
 

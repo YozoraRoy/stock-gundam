@@ -30,6 +30,12 @@ az webapp config appsettings set --name $AppName --resource-group $ResourceGroup
 # 5. 設定 OpenCode API 與 Fallback 環境變數 (雲端零編譯零依賴安裝，本地完全自給自足)
 Write-Host "5. 設定環境變數..." -ForegroundColor Yellow
 $apiKey = if ($env:OPENAI_API_KEY) { $env:OPENAI_API_KEY } else { "YOUR_API_KEY_HERE" }
+# AI 分析登入/額度相關環境變數（從本機 env 讀取；未設定時寫入佔位字串，上線前務必填入正確值）
+$authSecret = if ($env:AUTH_SECRET) { $env:AUTH_SECRET } else { "YOUR_AUTH_SECRET_HERE" }
+$googleClientId = if ($env:GOOGLE_CLIENT_ID) { $env:GOOGLE_CLIENT_ID } else { "YOUR_GOOGLE_CLIENT_ID" }
+$googleClientSecret = if ($env:GOOGLE_CLIENT_SECRET) { $env:GOOGLE_CLIENT_SECRET } else { "YOUR_GOOGLE_CLIENT_SECRET" }
+$lineClientId = if ($env:LINE_CLIENT_ID) { $env:LINE_CLIENT_ID } else { "YOUR_LINE_CLIENT_ID" }
+$lineClientSecret = if ($env:LINE_CLIENT_SECRET) { $env:LINE_CLIENT_SECRET } else { "YOUR_LINE_CLIENT_SECRET" }
 az webapp config appsettings set --name $AppName --resource-group $ResourceGroup --settings `
   LLM_PROVIDER=openai `
   OPENAI_API_KEY=$apiKey `
@@ -43,7 +49,13 @@ az webapp config appsettings set --name $AppName --resource-group $ResourceGroup
   NPM_RUN_BUILD=false `
   SCM_DO_BUILD_DURING_DEPLOYMENT=false `
   ENABLE_ORYX_BUILD=false `
-  DATABASE_PATH=/home/data/stock.db
+  DATABASE_PATH=/home/data/stock.db `
+  AUTH_SECRET=$authSecret `
+  AUTH_BASE_URL=https://stock-platform-roy.azurewebsites.net `
+  GOOGLE_CLIENT_ID=$googleClientId `
+  GOOGLE_CLIENT_SECRET=$googleClientSecret `
+  LINE_CLIENT_ID=$lineClientId `
+  LINE_CLIENT_SECRET=$lineClientSecret
 
 # 6. 在本地執行建置
 Write-Host "6. 在本地執行專案建置..." -ForegroundColor Yellow

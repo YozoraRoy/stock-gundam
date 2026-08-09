@@ -1,5 +1,6 @@
 import { TradingEngine } from '@stock/ai-engine'
-import { saveAnalysisRecord } from '@stock/database'
+import { saveAnalysisRecord, consumeAnalysisQuota } from '@stock/database'
+import { DAILY_ANALYSIS_LIMIT, getCurrentUserFromCookies, getTaiwanDateStr } from '../../../lib/auth'
 
 let _engine: TradingEngine | null = null
 let _engineError: string | null = null
@@ -21,6 +22,22 @@ export async function POST(req: Request) {
     const { symbol, date } = await req.json()
     if (!symbol) {
       return new Response(JSON.stringify({ error: 'symbol required' }), { status: 400 })
+    }
+
+    const user = await getCurrentUserFromCookies()
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'login required' }), { status: 401, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    const quota = await consumeAnalysisQuota(user.id, getTaiwanDateStr(), DAILY_ANALYSIS_LIMIT)
+    if (!quota.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: `今日 AI 分析額度已用完（${quota.used}/${quota.max}），請明天再試`,
+          quota,
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } },
+      )
     }
 
     const encoder = new TextEncoder()

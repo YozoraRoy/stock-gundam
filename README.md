@@ -139,11 +139,18 @@ git push origin main   # ← 自動觸發部署
 
 **需要的 GitHub Secrets**（需在 `https://github.com/YozoraRoy/stock-gundam/settings/secrets/actions` 設定）：
 
-| Secret | 內容 |
-|--------|------|
-| `AZURE_CREDENTIALS` | Azure Service Principal JSON（`az ad sp create-for-rbac` 產生） |
-| `OPENAI_API_KEY` | OpenCode AI API Key |
-| `DATABASE_URL` | SQL Server 連線字串 |
+| Secret | 內容 | 對應 Azure App Setting |
+|--------|------|--------------------------|
+| `AZURE_CREDENTIALS` | Azure Service Principal JSON（`az ad sp create-for-rbac` 產生） | — |
+| `OPENAI_API_KEY` | OpenCode AI API Key | `OPENAI_API_KEY` |
+| `DATABASE_URL` | SQL Server 連線字串 | `DATABASE_URL` |
+| `AUTH_SECRET` | 登入 JWT 簽章密鑰（`openssl rand -base64 32` 產生，禁止進 repo） | `AUTH_SECRET` |
+| `GOOGLE_CLIENT_ID` | Google OAuth 用戶端 ID | `GOOGLE_CLIENT_ID` |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth 用戶端密鑰 | `GOOGLE_CLIENT_SECRET` |
+| `LINE_CLIENT_ID` | LINE Channel ID | `LINE_CLIENT_ID` |
+| `LINE_CLIENT_SECRET` | LINE Channel Secret | `LINE_CLIENT_SECRET` |
+
+> `AUTH_BASE_URL` 為固定值 `https://stock-platform-roy.azurewebsites.net`，直接寫死在 `deploy.yml`，不需設為 Secret。部署時 `deploy.yml` 會把上表各 Secret 寫入 Azure App Settings。
 
 **線上監看**：`gh run watch` 或 GitHub → Actions 頁面。
 
@@ -162,6 +169,8 @@ powershell -ExecutionPolicy Bypass -File ./deploy.ps1
   ```
 
 專案已內建專屬的 **Azure 部署 Skill**（含常見錯誤診斷手冊）：[SKILL.md](file:///d:/PG/stock-platform/.agents/skills/azure-deploy/SKILL.md)
+
+如需設定 Google / LINE 登入，請見 **[OAuth 申請與設定說明](doc/oauth-setup.md)**。
 
 * **線上體驗網站**：[https://stock-platform-roy.azurewebsites.net](https://stock-platform-roy.azurewebsites.net)
 * **GitHub 倉庫**：[https://github.com/YozoraRoy/stock-gundam](https://github.com/YozoraRoy/stock-gundam)

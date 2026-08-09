@@ -87,7 +87,13 @@ jobs:
               ENABLE_ORYX_BUILD=false \
               WEBSITES_ENABLE_APP_SERVICE_STORAGE=true \
               DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-              DATABASE_PATH=/home/data/stock.db
+              DATABASE_PATH=/home/data/stock.db \
+              AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
+              AUTH_BASE_URL=https://stock-platform-roy.azurewebsites.net \
+              GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+              LINE_CLIENT_ID="${{ secrets.LINE_CLIENT_ID }}" \
+              LINE_CLIENT_SECRET="${{ secrets.LINE_CLIENT_SECRET }}"
 
       - name: Deploy via Kudu API (zipdeploy with clean)
         run: |

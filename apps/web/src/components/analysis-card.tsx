@@ -83,7 +83,7 @@ export function AnalysisCard({ analysis }: AnalysisCardProps) {
       </div>
 
       {sections.map(({ key, label, icon: Icon, color: iconColor }) => {
-        const content = analysis.reports[key]
+        const content = analysis.reports?.[key]
         if (!content) return null
 
         return (

@@ -130,6 +130,31 @@ function getSqliteDb(): Database.Database | null {
       CREATE INDEX IF NOT EXISTS idx_analysis_ticker ON analysis_records(ticker);
       CREATE INDEX IF NOT EXISTS idx_analysis_created ON analysis_records(created_at);
       CREATE INDEX IF NOT EXISTS idx_historical_gifts_stock ON historical_shareholder_gifts(stock_id);
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT,
+        display_name TEXT,
+        avatar_url TEXT,
+        created_at TEXT DEFAULT (datetime('now', 'localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS user_identities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        provider_user_id TEXT NOT NULL,
+        provider_email TEXT,
+        created_at TEXT DEFAULT (datetime('now', 'localtime')),
+        UNIQUE(provider, provider_user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_identities_user ON user_identities(user_id);
+      CREATE TABLE IF NOT EXISTS api_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        usage_date TEXT NOT NULL,
+        count INTEGER DEFAULT 0,
+        UNIQUE(user_id, usage_date)
+      );
+      CREATE INDEX IF NOT EXISTS idx_api_usage_user ON api_usage(user_id);
 
       UPDATE odd_lot_trades SET price = 34.15, volume = 19443, bid_price = 34.15, bid_volume = 8943, ask_price = 34.20, ask_volume = 6092 WHERE stock_id = '2887';
       UPDATE shareholder_gifts SET gift_name = '多用途矽膠隔熱餐墊(二入)', last_buy_date = '08/14' WHERE stock_id = '2887';
@@ -236,6 +261,37 @@ async function getAzurePool(): Promise<sql.ConnectionPool | null> {
           CONSTRAINT uq_hist_gift UNIQUE (stock_id, year)
         );
         CREATE INDEX idx_historical_gifts_stock ON historical_shareholder_gifts(stock_id);
+      END
+    `)
+
+    await _pool.request().query(`
+      IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'users')
+      BEGIN
+        CREATE TABLE users (
+          id           INT IDENTITY(1,1) PRIMARY KEY,
+          email        NVARCHAR(255),
+          display_name NVARCHAR(100),
+          avatar_url   NVARCHAR(500),
+          created_at   DATETIME DEFAULT GETDATE()
+        );
+        CREATE TABLE user_identities (
+          id               INT IDENTITY(1,1) PRIMARY KEY,
+          user_id          INT NOT NULL,
+          provider         NVARCHAR(20) NOT NULL,
+          provider_user_id NVARCHAR(100) NOT NULL,
+          provider_email   NVARCHAR(255),
+          created_at       DATETIME DEFAULT GETDATE(),
+          CONSTRAINT uq_identity UNIQUE (provider, provider_user_id)
+        );
+        CREATE INDEX idx_identities_user ON user_identities(user_id);
+        CREATE TABLE api_usage (
+          id         INT IDENTITY(1,1) PRIMARY KEY,
+          user_id    INT NOT NULL,
+          usage_date NVARCHAR(10) NOT NULL,
+          count      INT DEFAULT 0,
+          CONSTRAINT uq_api_usage UNIQUE (user_id, usage_date)
+        );
+        CREATE INDEX idx_api_usage_user ON api_usage(user_id);
       END
     `)
 
@@ -875,4 +931,233 @@ export async function getHistoricalGifts(stockId: string): Promise<HistoricalGif
     }
   }
   return []
+}
+
+// ─── Users / Auth / Quota ────────────────────────────────────────
+export type AuthProvider = 'google' | 'line'
+
+export interface UserRow {
+  id: number
+  email: string | null
+  display_name: string | null
+  avatar_url: string | null
+  created_at?: string
+}
+
+export interface IdentityInput {
+  provider: AuthProvider
+  providerUserId: string
+  email?: string | null
+  displayName?: string | null
+  avatarUrl?: string | null
+}
+
+export interface QuotaResult {
+  allowed: boolean
+  used: number
+  remaining: number
+  max: number
+}
+
+  const USER_COLUMNS = 'id, email, display_name, avatar_url, created_at'
+  const USER_COLUMNS_ALIASED = 'u.id, u.email, u.display_name, u.avatar_url, u.created_at'
+
+export async function getUserById(userId: number): Promise<UserRow | null> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (!pool) return null
+    try {
+      const result = await pool.request()
+        .input('id', sql.Int, userId)
+        .query(`SELECT ${USER_COLUMNS} FROM users WHERE id = @id`)
+      return (result.recordset[0] as UserRow) ?? null
+    } catch (e) {
+      console.error('[AzureSQL] getUserById error:', e)
+      return null
+    }
+  }
+
+  const db = getSqliteDb()
+  if (!db) return null
+  try {
+    return (db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(userId) as UserRow) ?? null
+  } catch (e) {
+    console.error('[SQLite] getUserById error:', e)
+    return null
+  }
+}
+
+export async function findOrCreateUser(input: IdentityInput): Promise<UserRow | null> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (!pool) return null
+    try {
+      const ident = await pool.request()
+        .input('p', sql.NVarChar(20), input.provider)
+        .input('pid', sql.NVarChar(100), input.providerUserId)
+        .query(`
+          SELECT ${USER_COLUMNS_ALIASED}
+          FROM users u JOIN user_identities i ON i.user_id = u.id
+          WHERE i.provider = @p AND i.provider_user_id = @pid
+        `)
+      if (ident.recordset[0]) {
+        await pool.request()
+          .input('id', sql.Int, ident.recordset[0].id)
+          .input('name', sql.NVarChar(100), input.displayName ?? null)
+          .input('avatar', sql.NVarChar(500), input.avatarUrl ?? null)
+          .input('email', sql.NVarChar(255), input.email ?? null)
+          .query(`UPDATE users SET display_name = COALESCE(@name, display_name), avatar_url = COALESCE(@avatar, avatar_url), email = COALESCE(@email, email) WHERE id = @id`)
+        return ident.recordset[0] as UserRow
+      }
+
+      let userId: number
+      if (input.email) {
+        const byEmail = await pool.request()
+          .input('email', sql.NVarChar(255), input.email)
+          .query('SELECT id FROM users WHERE email = @email')
+        if (byEmail.recordset[0]) {
+          userId = byEmail.recordset[0].id
+        } else {
+          const ins = await pool.request()
+            .input('email', sql.NVarChar(255), input.email)
+            .input('name', sql.NVarChar(100), input.displayName ?? null)
+            .input('avatar', sql.NVarChar(500), input.avatarUrl ?? null)
+            .query(`INSERT INTO users (email, display_name, avatar_url) VALUES (@email, @name, @avatar); SELECT SCOPE_IDENTITY() AS id`)
+          userId = Number(ins.recordset[0]?.id ?? -1)
+        }
+      } else {
+        const ins = await pool.request()
+          .input('name', sql.NVarChar(100), input.displayName ?? null)
+          .input('avatar', sql.NVarChar(500), input.avatarUrl ?? null)
+          .query(`INSERT INTO users (email, display_name, avatar_url) VALUES (NULL, @name, @avatar); SELECT SCOPE_IDENTITY() AS id`)
+        userId = Number(ins.recordset[0]?.id ?? -1)
+      }
+
+      if (userId > 0) {
+        await pool.request()
+          .input('uid', sql.Int, userId)
+          .input('p', sql.NVarChar(20), input.provider)
+          .input('pid', sql.NVarChar(100), input.providerUserId)
+          .input('pe', sql.NVarChar(255), input.email ?? null)
+          .query(`INSERT INTO user_identities (user_id, provider, provider_user_id, provider_email) VALUES (@uid, @p, @pid, @pe)`)
+        const u = await pool.request().input('id', sql.Int, userId).query(`SELECT ${USER_COLUMNS} FROM users WHERE id = @id`)
+        return (u.recordset[0] as UserRow) ?? null
+      }
+      return null
+    } catch (e) {
+      console.error('[AzureSQL] findOrCreateUser error:', e)
+      return null
+    }
+  }
+
+  const db = getSqliteDb()
+  if (!db) return null
+  try {
+    const existing = db.prepare(`
+      SELECT ${USER_COLUMNS_ALIASED}
+      FROM users u JOIN user_identities i ON i.user_id = u.id
+      WHERE i.provider = ? AND i.provider_user_id = ?
+    `).get(input.provider, input.providerUserId) as UserRow | undefined
+
+    if (existing) {
+      db.prepare(
+        `UPDATE users SET display_name = COALESCE(?, display_name), avatar_url = COALESCE(?, avatar_url), email = COALESCE(?, email) WHERE id = ?`,
+      ).run(input.displayName ?? null, input.avatarUrl ?? null, input.email ?? null, existing.id)
+      return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(existing.id) as UserRow
+    }
+
+    let userId: number
+    if (input.email) {
+      const byEmail = db.prepare('SELECT id FROM users WHERE email = ?').get(input.email) as { id: number } | undefined
+      if (byEmail) {
+        userId = byEmail.id
+      } else {
+        userId = Number(db.prepare('INSERT INTO users (email, display_name, avatar_url) VALUES (?, ?, ?)').run(input.email, input.displayName ?? null, input.avatarUrl ?? null).lastInsertRowid)
+      }
+    } else {
+      userId = Number(db.prepare('INSERT INTO users (email, display_name, avatar_url) VALUES (?, ?, ?)').run(null, input.displayName ?? null, input.avatarUrl ?? null).lastInsertRowid)
+    }
+
+    if (userId > 0) {
+      db.prepare('INSERT INTO user_identities (user_id, provider, provider_user_id, provider_email) VALUES (?, ?, ?, ?)').run(userId, input.provider, input.providerUserId, input.email ?? null)
+      return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(userId) as UserRow
+    }
+    return null
+  } catch (e) {
+    console.error('[SQLite] findOrCreateUser error:', e)
+    return null
+  }
+}
+
+export async function getUsageCount(userId: number, date: string): Promise<number> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (!pool) return 0
+    try {
+      const result = await pool.request()
+        .input('uid', sql.Int, userId)
+        .input('d', sql.NVarChar(10), date)
+        .query('SELECT count FROM api_usage WHERE user_id = @uid AND usage_date = @d')
+      return Number(result.recordset[0]?.count ?? 0)
+    } catch (e) {
+      console.error('[AzureSQL] getUsageCount error:', e)
+      return 0
+    }
+  }
+
+  const db = getSqliteDb()
+  if (!db) return 0
+  try {
+    const row = db.prepare('SELECT count FROM api_usage WHERE user_id = ? AND usage_date = ?').get(userId, date) as { count: number } | undefined
+    return Number(row?.count ?? 0)
+  } catch (e) {
+    console.error('[SQLite] getUsageCount error:', e)
+    return 0
+  }
+}
+
+/**
+ * Atomically consume one AI-analysis quota for the given user/date.
+ * If the user has reached `max` usages, the call fails (allowed=false).
+ */
+export async function consumeAnalysisQuota(userId: number, date: string, max: number): Promise<QuotaResult> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (!pool) return { allowed: false, used: 0, remaining: 0, max }
+    try {
+      await pool.request()
+        .input('uid', sql.Int, userId)
+        .input('d', sql.NVarChar(10), date)
+        .query(`
+          IF NOT EXISTS (SELECT 1 FROM api_usage WHERE user_id = @uid AND usage_date = @d)
+          BEGIN
+            INSERT INTO api_usage (user_id, usage_date, count) VALUES (@uid, @d, 0)
+          END
+        `)
+      const res = await pool.request()
+        .input('uid', sql.Int, userId)
+        .input('d', sql.NVarChar(10), date)
+        .input('max', sql.Int, max)
+        .query('UPDATE api_usage SET count = count + 1 WHERE user_id = @uid AND usage_date = @d AND count < @max')
+      const allowed = (res.rowsAffected[0] ?? 0) > 0
+      const used = await getUsageCount(userId, date)
+      return { allowed, used, remaining: Math.max(0, max - used), max }
+    } catch (e) {
+      console.error('[AzureSQL] consumeAnalysisQuota error:', e)
+      return { allowed: false, used: 0, remaining: 0, max }
+    }
+  }
+
+  const db = getSqliteDb()
+  if (!db) return { allowed: false, used: 0, remaining: 0, max }
+  try {
+    db.prepare('INSERT OR IGNORE INTO api_usage (user_id, usage_date, count) VALUES (?, ?, 0)').run(userId, date)
+    const res = db.prepare('UPDATE api_usage SET count = count + 1 WHERE user_id = ? AND usage_date = ? AND count < ?').run(userId, date, max)
+    const allowed = res.changes > 0
+    const used = await getUsageCount(userId, date)
+    return { allowed, used, remaining: Math.max(0, max - used), max }
+  } catch (e) {
+    console.error('[SQLite] consumeAnalysisQuota error:', e)
+    return { allowed: false, used: 0, remaining: 0, max }
+  }
 }
