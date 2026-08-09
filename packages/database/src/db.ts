@@ -1,14 +1,14 @@
 import Database from 'better-sqlite3'
 import sql from 'mssql'
-import { readFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { MIGRATIONS } from './generated/migrations.js'
 import { SEED_TRADES, SEED_GIFTS } from './seed-data.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = join(__dirname, '..', 'data')
 const DB_PATH = process.env.DATABASE_PATH || join(DATA_DIR, 'stock.db')
-const MIGRATIONS_DIR = join(__dirname, '..', 'migrations')
 
 // ─── Backend detection ───────────────────────────────────────────
 const DATABASE_URL = process.env.DATABASE_URL || ''
@@ -630,39 +630,32 @@ async function migrateAzure(): Promise<void> {
       (await pool.request().query('SELECT name FROM migrations')).recordset.map((r: any) => r.name)
     )
 
-    if (existsSync(MIGRATIONS_DIR)) {
-      const migrationFiles = readdirSync(MIGRATIONS_DIR)
-        .filter(f => f.endsWith('.sql'))
-        .sort()
-
-      for (const file of migrationFiles) {
-        if (applied.has(file)) continue
-        const raw = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8')
-        const batches = raw.split(/\bGO\b/i).filter(b => b.trim())
-        for (const batch of batches) {
-          if (!batch.trim()) continue
-          try {
-            await pool.request().query(batch)
-          } catch (e: any) {
-            const msg = String(e?.message ?? e).toLowerCase()
-            const isDup =
-              e?.number === 2705 ||
-              e?.number === 4928 ||
-              (msg.includes('already exists') && msg.includes('column'))
-            if (isDup) {
-              console.log(`[AzureSQL] migration ${file}: column already exists, skipping statement`)
-            } else {
-              // 001/002 為 SQLite 語法（CREATE TABLE IF NOT EXISTS）在 T-SQL 不合法，
-              // 但表格已由 getAzurePool 建立。記錄並跳過，避免中止整個 migrate。
-              console.warn(`[AzureSQL] migration ${file}: statement failed, skipping (${msg.split('\n')[0]})`)
-            }
+    for (const { name: file, sql: raw } of MIGRATIONS) {
+      if (applied.has(file)) continue
+      const batches = raw.split(/\bGO\b/i).filter(b => b.trim())
+      for (const batch of batches) {
+        if (!batch.trim()) continue
+        try {
+          await pool.request().query(batch)
+        } catch (e: any) {
+          const msg = String(e?.message ?? e).toLowerCase()
+          const isDup =
+            e?.number === 2705 ||
+            e?.number === 4928 ||
+            (msg.includes('already exists') && msg.includes('column'))
+          if (isDup) {
+            console.log(`[AzureSQL] migration ${file}: column already exists, skipping statement`)
+          } else {
+            // 001/002 為 SQLite 語法（CREATE TABLE IF NOT EXISTS）在 T-SQL 不合法，
+            // 但表格已由 getAzurePool 建立。記錄並跳過，避免中止整個 migrate。
+            console.warn(`[AzureSQL] migration ${file}: statement failed, skipping (${msg.split('\n')[0]})`)
           }
         }
-        await pool.request()
-          .input('name', sql.NVarChar(200), file)
-          .query('INSERT INTO migrations (name) VALUES (@name)')
-        console.log(`Applied migration: ${file}`)
       }
+      await pool.request()
+        .input('name', sql.NVarChar(200), file)
+        .query('INSERT INTO migrations (name) VALUES (@name)')
+      console.log(`Applied migration: ${file}`)
     }
   } catch (e) {
     console.error('[AzureSQL] Migration failed:', e)
@@ -684,34 +677,27 @@ function migrateSqlite(): void {
       db.prepare('SELECT name FROM migrations').all().map((r: any) => r.name)
     )
 
-    if (existsSync(MIGRATIONS_DIR)) {
-      const migrationFiles = readdirSync(MIGRATIONS_DIR)
-        .filter(f => f.endsWith('.sql'))
-        .sort()
-
-      const insert = db.prepare('INSERT INTO migrations (name) VALUES (?)')
-      for (const file of migrationFiles) {
-        if (applied.has(file)) continue
-        const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8')
-        const statements = sql
-          .split(';')
-          .map(s => s.trim())
-          .filter(s => s.length > 0)
-        for (const stmt of statements) {
-          try {
-            db.exec(stmt)
-          } catch (e: any) {
-            const msg = String(e?.message ?? e).toLowerCase()
-            if (msg.includes('duplicate column name')) {
-              console.log(`[SQLite] migration ${file}: column already exists, skipping statement`)
-              continue
-            }
-            throw e
+    const insert = db.prepare('INSERT INTO migrations (name) VALUES (?)')
+    for (const { name: file, sql } of MIGRATIONS) {
+      if (applied.has(file)) continue
+      const statements = sql
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0)
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt)
+        } catch (e: any) {
+          const msg = String(e?.message ?? e).toLowerCase()
+          if (msg.includes('duplicate column name')) {
+            console.log(`[SQLite] migration ${file}: column already exists, skipping statement`)
+            continue
           }
+          throw e
         }
-        insert.run(file)
-        console.log(`Applied migration: ${file}`)
       }
+      insert.run(file)
+      console.log(`Applied migration: ${file}`)
     }
   } catch (e) {
     console.error('[SQLite] Migration failed:', e)

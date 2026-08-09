@@ -20,6 +20,7 @@
     "sync:stockgift": "npm run sync:stockgift --workspace=packages/database",
     "sync:mops": "npm run sync:mops --workspace=packages/database",
     "sync:mops:missing": "npm run sync:mops:missing --workspace=packages/database",
+    "db:generate-migrations": "npm run db:generate-migrations --workspace=packages/database",
     "db:sync": "npm run sync:db --workspace=packages/database"
   },
   "devDependencies": {

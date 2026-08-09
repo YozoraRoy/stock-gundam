@@ -27,9 +27,6 @@ jobs:
           mkdir -p apps/web/.next/standalone/apps/web/.next
           cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
           if [ -d apps/web/public ]; then cp -r apps/web/public apps/web/.next/standalone/apps/web/public; fi
-          # Ship DB migrations so migrate() can apply schema changes at runtime (standalone drops non-bundled dirs).
-          mkdir -p apps/web/.next/standalone/apps/web/.next/server/migrations
-          cp packages/database/migrations/*.sql apps/web/.next/standalone/apps/web/.next/server/migrations/
           echo "Standalone entry:"
           ls apps/web/.next/standalone/apps/web/server.js
 
