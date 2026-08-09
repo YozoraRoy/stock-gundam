@@ -87,6 +87,7 @@ jobs:
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               ENABLE_ORYX_BUILD=false \
               WEBSITES_ENABLE_APP_SERVICE_STORAGE=true \
+              WEBSITE_RUN_FROM_PACKAGE=1 \
               DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               DATABASE_PATH=/home/data/stock.db \
               AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
@@ -103,47 +104,20 @@ jobs:
             --resource-group rg-yuzora_roy_ai \
             --startup-file "cd /home/site/wwwroot/apps/web && node /home/site/wwwroot/node_modules/next/dist/bin/next start"
 
-      - name: Deploy via Kudu API (zipdeploy with clean, with retry)
+      - name: Deploy via OneDeploy (RUN_FROM_PACKAGE, no extraction)
         run: |
-          echo "Getting deployment credentials..."
-          az webapp deployment list-publishing-credentials \
+          az webapp start --name stock-platform-roy --resource-group rg-yuzora_roy_ai
+          az webapp deploy \
             --name stock-platform-roy \
-            --resource-group rg-yuzora_roy_ai > /tmp/creds.json
-          USER=$(cat /tmp/creds.json | jq -r '.publishingUserName')
-          PASS=$(cat /tmp/creds.json | jq -r '.publishingPassword')
-
-          SCM_URL="https://stock-platform-roy.scm.azurewebsites.net"
-
-          DEPLOY_OK=0
-          for attempt in 1 2 3; do
-            echo "Uploading deploy.zip (attempt $attempt/3, timeout: 600s)..."
-            HTTP=$(curl -s -o /tmp/deploy_resp.txt -w "%{http_code}" \
-              --max-time 600 \
-              --connect-timeout 60 \
-              -u "$USER:$PASS" \
-              -H "Content-Type: application/zip" \
-              --data-binary @./deploy.zip \
-              "$SCM_URL/api/zipdeploy?clean=true" 2>/dev/null || echo "000")
-            echo "zipdeploy HTTP $HTTP"
-            if [ "$HTTP" = "200" ] || [ "$HTTP" = "201" ] || [ "$HTTP" = "202" ]; then
-              echo "Upload accepted. Response: $(cat /tmp/deploy_resp.txt)"
-              DEPLOY_OK=1
-              break
-            fi
-            echo "Deploy attempt $attempt returned HTTP $HTTP - waiting 60s before retry..."
-            sleep 60
-          done
-          if [ "$DEPLOY_OK" = "0" ]; then
-            echo "::error::zipdeploy failed after 3 attempts"
-            exit 1
-          fi
-
-          echo "Deployment complete. Waiting for extraction and app to start..."
-          sleep 20
+            --resource-group rg-yuzora_roy_ai \
+            --src-path ./deploy.zip \
+            --type zip \
+            --timeout 900
+          echo "Deploy accepted. Waiting for app to start from package..."
 
           echo "Checking app health..."
           HEALTHY=0
-          for i in 1 2 3 4 5 6 7 8 9 10; do
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "https://stock-platform-roy.azurewebsites.net/login" 2>/dev/null || echo "000")
             if [ "$CODE" = "200" ]; then
               echo "App healthy (HTTP 200) after attempt $i"
