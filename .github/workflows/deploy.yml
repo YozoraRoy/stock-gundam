@@ -79,14 +79,36 @@ jobs:
             --resource-group rg-yuzora_roy_ai \
             --startup-file "node /home/site/wwwroot/apps/web/.next/standalone/apps/web/server.js"
 
-      - name: Deploy to Azure App Service (Push-Deployer)
-        uses: azure/webapps-deploy@v2
-        with:
-          app-name: stock-platform-roy
-          slot-name: production
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-          package: ./deploy.zip
-          type: zip
+      - name: Deploy via Kudu zipdeploy (clean, small zip)
+        run: |
+          echo "Stopping app to deploy cleanly (avoids volume remount race)..."
+          az webapp stop --name stock-platform-roy --resource-group rg-yuzora_roy_ai
+
+          echo "Getting deployment credentials..."
+          az webapp deployment list-publishing-credentials \
+            --name stock-platform-roy \
+            --resource-group rg-yuzora_roy_ai > /tmp/creds.json
+          USER=$(cat /tmp/creds.json | jq -r '.publishingUserName')
+          PASS=$(cat /tmp/creds.json | jq -r '.publishingPassword')
+
+          SCM_URL="https://stock-platform-roy.scm.azurewebsites.net"
+
+          echo "Uploading deploy.zip..."
+          HTTP=$(curl -s -o /tmp/deploy_resp.txt -w "%{http_code}" \
+            --max-time 900 \
+            --connect-timeout 60 \
+            -u "$USER:$PASS" \
+            -H "Content-Type: application/zip" \
+            --data-binary @./deploy.zip \
+            "$SCM_URL/api/zipdeploy?clean=true" 2>/dev/null || echo "000")
+          echo "zipdeploy HTTP $HTTP"
+          if [ "$HTTP" != "200" ] && [ "$HTTP" != "201" ] && [ "$HTTP" != "202" ]; then
+            echo "::error::zipdeploy failed (HTTP $HTTP)"
+            cat /tmp/deploy_resp.txt
+            exit 1
+          fi
+          echo "Upload accepted. Starting app..."
+          az webapp start --name stock-platform-roy --resource-group rg-yuzora_roy_ai
 
       - name: Check app health
         run: |
