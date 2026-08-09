@@ -22,43 +22,18 @@ jobs:
       - name: Build all workspaces
         run: npm run local-build
 
-      - name: Fix node_modules/.bin symlinks for portable deployment
+      - name: Prepare standalone output
         run: |
-          cd node_modules/.bin
-          for f in *; do
-            if [ -L "$f" ]; then
-              target=$(readlink -f "$f")
-              rel=$(python3 -c "import os.path; print(os.path.relpath('$target', '.'))")
-              rm "$f"
-              {
-                echo '#!/bin/sh'
-                echo 'basedir=$(dirname "$(echo "$0" | sed -e '\''s,\\,/,g'\'')")'
-                echo 'case `uname` in'
-                echo '    *CYGWIN*|*MINGW*|*MSYS*)'
-                echo '        if command -v cygpath > /dev/null 2>&1; then'
-                echo '            basedir=$(cygpath -w "$basedir")'
-                echo '        fi'
-                echo '    ;;'
-                echo 'esac'
-                echo "exec node \"\$basedir/$rel\" \"\$@\""
-              } > "$f"
-              chmod +x "$f"
-              echo "Fixed: $f -> $rel"
-            fi
-          done
+          mkdir -p apps/web/.next/standalone/apps/web/.next
+          cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
+          if [ -d apps/web/public ]; then cp -r apps/web/public apps/web/.next/standalone/apps/web/public; fi
+          echo "Standalone entry:"
+          ls apps/web/.next/standalone/apps/web/server.js
 
-      - name: Create deployment zip
+      - name: Create deployment zip (standalone only, small)
         run: |
-          zip -r deploy.zip . \
-            -x '.git/*' \
-            -x '.github/*' \
-            -x '.opencode/*' \
-            -x '*.zip' \
-            -x 'deploy.zip' \
-            -x 'node_modules/.cache/*' \
-            -x 'apps/web/.next/cache/*' \
-            -x 'azure_logs/*' \
-            -x 'webapp_logs/*'
+          zip -r deploy.zip apps/web/.next/standalone \
+            -x 'apps/web/.next/standalone/apps/web/.next/cache/*'
 
       - name: Azure Login
         uses: azure/login@v2
@@ -87,7 +62,7 @@ jobs:
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               ENABLE_ORYX_BUILD=false \
               WEBSITES_ENABLE_APP_SERVICE_STORAGE=true \
-              WEBSITE_RUN_FROM_PACKAGE=1 \
+              WEBSITE_RUN_FROM_PACKAGE=0 \
               DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               DATABASE_PATH=/home/data/stock.db \
               AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
@@ -102,20 +77,20 @@ jobs:
           az webapp config set \
             --name stock-platform-roy \
             --resource-group rg-yuzora_roy_ai \
-            --startup-file "cd /home/site/wwwroot/apps/web && node /home/site/wwwroot/node_modules/next/dist/bin/next start"
+            --startup-file "node /home/site/wwwroot/apps/web/.next/standalone/apps/web/server.js"
 
-      - name: Deploy via OneDeploy (RUN_FROM_PACKAGE, no extraction)
+      - name: Deploy to Azure App Service (Push-Deployer)
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: stock-platform-roy
+          slot-name: production
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          package: ./deploy.zip
+          type: zip
+
+      - name: Check app health
         run: |
-          az webapp start --name stock-platform-roy --resource-group rg-yuzora_roy_ai
-          az webapp deploy \
-            --name stock-platform-roy \
-            --resource-group rg-yuzora_roy_ai \
-            --src-path ./deploy.zip \
-            --type zip \
-            --timeout 900
-          echo "Deploy accepted. Waiting for app to start from package..."
-
-          echo "Checking app health..."
+          echo "Waiting for app to start from standalone build..."
           HEALTHY=0
           for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "https://stock-platform-roy.azurewebsites.net/login" 2>/dev/null || echo "000")
