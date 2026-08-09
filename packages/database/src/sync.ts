@@ -170,3 +170,54 @@ export async function applySyncMerge(merged: MergedExport): Promise<void> {
     }
   }
 }
+
+async function insertRowsBatched(table: SyncTableName, rows: SyncRow[]): Promise<void> {
+  if (rows.length === 0) return
+  const cols = TABLE_COLUMNS[table]
+  const colSql = cols.join(', ')
+  // SQL Server 單一查詢最多 2100 個參數 → 每個批次依欄位數縮小。
+  const batchSize = Math.max(1, Math.floor(1800 / cols.length))
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize)
+    const rowsSql = batch
+      .map((_, r) => `(${cols.map((c) => `@b${r}_${c}`).join(', ')})`)
+      .join(', ')
+    const params: Record<string, any> = {}
+    batch.forEach((row, r) => {
+      for (const c of cols) params[`b${r}_${c}`] = row[c] ?? null
+    })
+    await dbExecute(`INSERT INTO ${table} (${colSql}) VALUES ${rowsSql}`, params)
+  }
+}
+
+/**
+ * 線上端 import 的差量套用（省掉逐列 delete+insert，避免 App Service 504）。
+ * 目前 DB（線上）為權威：
+ *  - union 表：只插「線上沒有」的本機新增列（批次多列 INSERT）。
+ *  - analysis_records：本機較新的 ticker 才取代線上該 ticker 舊列。
+ * @param remote 呼叫端（本機）匯出的資料
+ */
+export async function applySyncImport(remote: SyncExport): Promise<MergedExport> {
+  const current = await exportSyncData()
+  const merged = mergeExports(remote, current)
+
+  for (const table of SYNC_TABLES) {
+    if (table === 'analysis_records') continue
+    const toInsert = merged.tables[table]
+      .filter((t) => t.source === 'local')
+      .map((t) => t.row)
+    await insertRowsBatched(table, toInsert)
+  }
+
+  for (const { row, source } of merged.tables.analysis_records) {
+    if (source === 'online') continue
+    await deleteRowsByTicker(row.ticker)
+    await insertRow('analysis_records', row)
+  }
+
+  return merged
+}
+
+async function deleteRowsByTicker(ticker: string): Promise<void> {
+  await dbExecute('DELETE FROM analysis_records WHERE ticker = @ticker', { ticker })
+}

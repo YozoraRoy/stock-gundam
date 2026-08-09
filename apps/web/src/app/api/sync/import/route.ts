@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { exportSyncData, mergeExports, applySyncMerge } from '@stock/database'
+import { applySyncImport } from '@stock/database'
 import type { SyncExport } from '@stock/database'
 import { authorizeSync } from '@/lib/sync-auth'
 
@@ -17,9 +17,7 @@ export async function POST(req: Request) {
     }
 
     const remote = body as SyncExport
-    const online = await exportSyncData()
-    const merged = mergeExports(remote, online)
-    await applySyncMerge(merged)
+    const merged = await applySyncImport(remote)
 
     return NextResponse.json({ success: true, stats: merged.stats })
   } catch (error: any) {

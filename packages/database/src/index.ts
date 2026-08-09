@@ -6,7 +6,7 @@ export {
   getUserById, findOrCreateUser, getUsageCount, consumeAnalysisQuota,
 } from './db.js'
 export type { AnalysisRecord, HistoricalGift, UserRow, AuthProvider, IdentityInput, QuotaResult } from './db.js'
-export { exportSyncData, mergeExports, applySyncMerge, SYNC_TABLES } from './sync.js'
+export { exportSyncData, mergeExports, applySyncMerge, applySyncImport, SYNC_TABLES } from './sync.js'
 export type { SyncExport, SyncRow, MergedExport, SyncTableName, TaggedRow, RowSource } from './sync.js'
 export type { Database } from 'better-sqlite3'
 export { fetchTwseOddLots } from './fetchers/twse-odd-lot.js'
