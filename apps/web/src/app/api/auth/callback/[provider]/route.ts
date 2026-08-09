@@ -52,7 +52,11 @@ export async function GET(
     }
     const token = await signSession(user.id)
 
-    const res = NextResponse.redirect(oauthState.redirect)
+    const rawRedirect = oauthState.redirect
+    const redirect = rawRedirect?.startsWith('/') && !rawRedirect.startsWith('//')
+      ? new URL(rawRedirect, baseUrl).toString()
+      : baseUrl
+    const res = NextResponse.redirect(redirect)
     applySessionCookie(res, token)
     res.cookies.delete(OAUTH_COOKIE)
     return res
