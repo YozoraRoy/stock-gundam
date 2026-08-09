@@ -649,8 +649,13 @@ async function migrateAzure(): Promise<void> {
               e?.number === 2705 ||
               e?.number === 4928 ||
               (msg.includes('already exists') && msg.includes('column'))
-            if (!isDup) throw e
-            console.log(`[AzureSQL] migration ${file}: column already exists, skipping statement`)
+            if (isDup) {
+              console.log(`[AzureSQL] migration ${file}: column already exists, skipping statement`)
+            } else {
+              // 001/002 為 SQLite 語法（CREATE TABLE IF NOT EXISTS）在 T-SQL 不合法，
+              // 但表格已由 getAzurePool 建立。記錄並跳過，避免中止整個 migrate。
+              console.warn(`[AzureSQL] migration ${file}: statement failed, skipping (${msg.split('\n')[0]})`)
+            }
           }
         }
         await pool.request()
