@@ -14,6 +14,7 @@
     "migrate": "npx tsx seed/migrate.ts",
     "scheduler": "npx tsx seed/scheduler.ts",
     "sync:stockgift": "npx tsx src/sync-stockgift.ts",
+    "sync:db": "npx tsx seed/sync.ts",
     "sync:mops": "npx tsx src/sync-mops.ts",
     "sync:mops:missing": "npx tsx src/sync-mops.ts --missing-only"
   },
