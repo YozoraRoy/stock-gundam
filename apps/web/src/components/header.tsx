@@ -28,16 +28,21 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
   useEffect(() => {
     if (!user) return
     let cancelled = false
-    fetch('/api/auth/me')
-      .then(res => (res.ok ? res.json() : null))
-      .then(data => {
-        if (cancelled || !data?.success) return
-        if (data.user) setUser(data.user)
-        if (typeof data.quota?.remaining === 'number') setRemaining(data.quota.remaining)
-      })
-      .catch(() => {})
+    const refreshQuota = () => {
+      fetch('/api/auth/me')
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => {
+          if (cancelled || !data?.success) return
+          if (data.user) setUser(data.user)
+          if (typeof data.quota?.remaining === 'number') setRemaining(data.quota.remaining)
+        })
+        .catch(() => {})
+    }
+    refreshQuota()
+    window.addEventListener('quota-updated', refreshQuota)
     return () => {
       cancelled = true
+      window.removeEventListener('quota-updated', refreshQuota)
     }
   }, [user?.id])
 

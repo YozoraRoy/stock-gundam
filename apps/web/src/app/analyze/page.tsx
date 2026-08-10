@@ -130,7 +130,7 @@ function AnalyzeContent() {
           return
         }
         if (res.status === 429) {
-          setError(body.error || `今日額度已用完 (${body.quota?.used ?? 10}/10)`)
+          setError(body.error || `今日額度已用完 (${body.quota?.used ?? 3}/3)`)
           return
         }
         throw new Error(body.error || `HTTP ${res.status}`)
@@ -169,8 +169,9 @@ function AnalyzeContent() {
               break
             case 'result':
               setAnalysis(parsed)
-              // 分析成功後刷新歷史列表
+              // 分析成功後刷新歷史列表，並通知 header 更新剩餘次數
               fetchHistory()
+              window.dispatchEvent(new Event('quota-updated'))
               break
             case 'error':
               setError(parsed.message)
