@@ -71,7 +71,8 @@ jobs:
               GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
               LINE_CLIENT_ID="${{ secrets.LINE_CLIENT_ID }}" \
               LINE_CLIENT_SECRET="${{ secrets.LINE_CLIENT_SECRET }}" \
-              SYNC_TOKEN="${{ secrets.SYNC_TOKEN }}"
+              SYNC_TOKEN="${{ secrets.SYNC_TOKEN }}" \
+              ADMIN_LINE_USER_IDS=U992bf6b74efcd58e3dc5d3f8d356e880
 
       - name: Set startup command
         run: |

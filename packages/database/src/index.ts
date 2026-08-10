@@ -3,9 +3,10 @@ export {
   dbQueryAll, dbQueryFirst, dbExecute, dbExecRaw,
   saveAnalysisRecord, getAnalysisRecords, getAnalysisRecordById,
   getHistoricalGifts, ensureSeedData,
-  getUserById, findOrCreateUser, getUsageCount, consumeAnalysisQuota,
+  getUserById, getUserIdentities, findOrCreateUser, getUsageCount, consumeAnalysisQuota,
+  deleteAnalysisRecord,
 } from './db.js'
-export type { AnalysisRecord, HistoricalGift, UserRow, AuthProvider, IdentityInput, QuotaResult } from './db.js'
+export type { AnalysisRecord, HistoricalGift, UserRow, UserIdentityRow, AuthProvider, IdentityInput, QuotaResult } from './db.js'
 export { exportSyncData, mergeExports, applySyncMerge, applySyncImport, SYNC_TABLES } from './sync.js'
 export type { SyncExport, SyncRow, MergedExport, SyncTableName, TaggedRow, RowSource } from './sync.js'
 export type { Database } from 'better-sqlite3'

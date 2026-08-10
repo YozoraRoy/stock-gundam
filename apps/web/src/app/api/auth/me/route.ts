@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsageCount } from '@stock/database'
-import { DAILY_ANALYSIS_LIMIT, getCurrentUserFromCookies, getTaiwanDateStr } from '../../../../lib/auth'
+import { DAILY_ANALYSIS_LIMIT, getCurrentUserFromCookies, getTaiwanDateStr, isAdminUser } from '../../../../lib/auth'
 
 export async function GET() {
   try {
@@ -9,6 +9,7 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'not authenticated' }, { status: 401 })
     }
     const used = await getUsageCount(user.id, getTaiwanDateStr())
+    const isAdmin = await isAdminUser(user)
     return NextResponse.json({
       success: true,
       user: {
@@ -17,6 +18,7 @@ export async function GET() {
         email: user.email,
         avatarUrl: user.avatar_url,
         createdAt: user.created_at,
+        isAdmin,
       },
       quota: {
         max: DAILY_ANALYSIS_LIMIT,

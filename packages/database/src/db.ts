@@ -882,6 +882,42 @@ export async function getAnalysisRecordById(id: number): Promise<AnalysisRecord 
   return memoryStore.find(r => r.id === id)
 }
 
+export async function deleteAnalysisRecord(id: number): Promise<boolean> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (pool) {
+      try {
+        const result = await pool.request()
+          .input('id', sql.Int, id)
+          .query('DELETE FROM analysis_records WHERE id = @id')
+        return result.rowsAffected[0] > 0
+      } catch (e) {
+        console.error('[AzureSQL] deleteAnalysisRecord error:', e)
+        return false
+      }
+    }
+    return false
+  }
+
+  const db = getSqliteDb()
+  if (db) {
+    try {
+      const info = db.prepare('DELETE FROM analysis_records WHERE id = ?').run(id)
+      return info.changes > 0
+    } catch (e) {
+      console.error('[SQLite] deleteAnalysisRecord error:', e)
+      return false
+    }
+  }
+
+  const idx = memoryStore.findIndex(r => r.id === id)
+  if (idx >= 0) {
+    memoryStore.splice(idx, 1)
+    return true
+  }
+  return false
+}
+
 // ─── Historical Gifts ────────────────────────────────────────────
 export interface HistoricalGift {
   id?: number
@@ -976,6 +1012,39 @@ export async function getUserById(userId: number): Promise<UserRow | null> {
     console.error('[SQLite] getUserById error:', e)
     return null
   }
+}
+
+export interface UserIdentityRow {
+  provider: string
+  provider_user_id: string
+  provider_email: string | null
+}
+
+export async function getUserIdentities(userId: number): Promise<UserIdentityRow[]> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (pool) {
+      try {
+        const result = await pool.request()
+          .input('id', sql.Int, userId)
+          .query('SELECT provider, provider_user_id, provider_email FROM user_identities WHERE user_id = @id')
+        return result.recordset as UserIdentityRow[]
+      } catch (e) {
+        console.error('[AzureSQL] getUserIdentities error:', e)
+      }
+    }
+    return []
+  }
+
+  const db = getSqliteDb()
+  if (db) {
+    try {
+      return db.prepare('SELECT provider, provider_user_id, provider_email FROM user_identities WHERE user_id = ?').all(userId) as UserIdentityRow[]
+    } catch (e) {
+      console.error('[SQLite] getUserIdentities error:', e)
+    }
+  }
+  return []
 }
 
 export async function findOrCreateUser(input: IdentityInput): Promise<UserRow | null> {

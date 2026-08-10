@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { BarChart3, Brain, Search as SearchIcon, Clock, History, FileText, ChevronRight, Target, RefreshCw } from 'lucide-react'
+import { BarChart3, Brain, Search as SearchIcon, Clock, History, FileText, ChevronRight, Target, RefreshCw, Trash2, Zap } from 'lucide-react'
 import { SearchBar } from '@/components/search-bar'
 import { AnalysisCard } from '@/components/analysis-card'
 import { ProgressPanel } from '@/components/progress-panel'
@@ -13,6 +13,8 @@ interface AnalysisRecord {
   recommendation: string
   summary: string
   full_report_json: string
+  model_usage?: string
+  fallback_count?: number
   created_at: string
 }
 
@@ -28,9 +30,33 @@ function AnalyzeContent() {
   const [historyRecords, setHistoryRecords] = useState<AnalysisRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  // 讀取目前使用者是否為管理者（LINE 帳號 Roy）
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (data?.success && data.user) setIsAdmin(!!data.user.isAdmin)
+      })
+      .catch(() => {})
+  }, [])
+
+  // 從 model_usage JSON 計算該筆分析消耗的總 token 數
+  const getRecordTokens = (record: AnalysisRecord): number | null => {
+    if (!record.model_usage) return null
+    try {
+      const agents = JSON.parse(record.model_usage) as { totalTokens?: number }[]
+      if (!Array.isArray(agents)) return null
+      const total = agents.reduce((sum, a) => sum + (a.totalTokens ?? 0), 0)
+      return total > 0 ? total : null
+    } catch {
+      return null
+    }
+  }
 
   // 讀取歷史分析紀錄 (支援傳入 symbol)
   const fetchHistory = useCallback(async (targetSymbol?: string) => {
@@ -163,6 +189,33 @@ function AnalyzeContent() {
       window.scrollTo({ top: 300, behavior: 'smooth' })
     } catch (e) {
       console.error('Failed to parse historical report JSON:', e)
+    }
+  }
+
+  // 刪除歷史分析紀錄（僅管理者）
+  const handleDeleteRecord = async (record: AnalysisRecord) => {
+    if (!window.confirm(`確定要刪除 ${record.ticker} 的分析紀錄 (Record #${record.id}) 嗎？此操作無法復原。`)) {
+      return
+    }
+    try {
+      const res = await fetch(`/api/analysis-records/${record.id}`, { method: 'DELETE' })
+      if (res.status === 401) {
+        const redirectUrl = `/login?redirect=${encodeURIComponent('/analyze')}`
+        window.location.href = redirectUrl
+        return
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.error || `刪除失敗 (HTTP ${res.status})`)
+        return
+      }
+      if (selectedRecordId === record.id) {
+        setAnalysis(null)
+        setSelectedRecordId(null)
+      }
+      fetchHistory()
+    } catch (e: any) {
+      setError(e.message)
     }
   }
 
@@ -300,7 +353,9 @@ function AnalyzeContent() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {historyRecords.map(record => (
+            {historyRecords.map(record => {
+              const recordTokens = getRecordTokens(record)
+              return (
               <div
                 key={record.id}
                 onClick={() => handleSelectHistoryRecord(record)}
@@ -327,13 +382,40 @@ function AnalyzeContent() {
                 )}
 
                 <div className="flex items-center justify-between text-[10px] text-[var(--text-secondary)] border-t border-white/5 pt-2">
-                  <span>{record.created_at}</span>
-                  <span className="flex items-center gap-0.5 text-[var(--accent)] hover:underline">
-                    查看完整報告 <ChevronRight className="w-3 h-3" />
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="whitespace-nowrap">{record.created_at}</span>
+                    {recordTokens !== null && (
+                      <span
+                        className="inline-flex items-center gap-1 whitespace-nowrap text-[var(--accent)]"
+                        title="本次分析消耗的 token 數"
+                      >
+                        <Zap className="w-3 h-3" />
+                        {recordTokens.toLocaleString()} tokens
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteRecord(record)
+                        }}
+                        className="flex items-center gap-1 text-rose-400/80 hover:text-rose-400 transition-colors"
+                        title="刪除此筆分析紀錄（管理者）"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>刪除</span>
+                      </button>
+                    )}
+                    <span className="flex items-center gap-0.5 text-[var(--accent)] hover:underline whitespace-nowrap">
+                      查看完整報告 <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
