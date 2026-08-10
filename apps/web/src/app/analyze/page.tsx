@@ -46,16 +46,25 @@ function AnalyzeContent() {
   }, [])
 
   // 從 model_usage JSON 計算該筆分析消耗的總 token 數
+  // 舊紀錄 model_usage 可能為空，但完整報告內可能存有 tokenUsage，一併回退讀取
   const getRecordTokens = (record: AnalysisRecord): number | null => {
-    if (!record.model_usage) return null
-    try {
-      const agents = JSON.parse(record.model_usage) as { totalTokens?: number }[]
-      if (!Array.isArray(agents)) return null
-      const total = agents.reduce((sum, a) => sum + (a.totalTokens ?? 0), 0)
-      return total > 0 ? total : null
-    } catch {
-      return null
+    if (record.model_usage) {
+      try {
+        const agents = JSON.parse(record.model_usage) as { totalTokens?: number }[]
+        if (Array.isArray(agents)) {
+          const total = agents.reduce((sum, a) => sum + (a.totalTokens ?? 0), 0)
+          if (total > 0) return total
+        }
+      } catch {}
     }
+    try {
+      const report = JSON.parse(record.full_report_json) as {
+        tokenUsage?: { total?: { totalTokens?: number } }
+      }
+      const total = report?.tokenUsage?.total?.totalTokens
+      if (typeof total === 'number' && total > 0) return total
+    } catch {}
+    return null
   }
 
   // 讀取歷史分析紀錄 (支援傳入 symbol)
