@@ -74,7 +74,7 @@ function LoginContent() {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold mb-1">登入 Stock Gundam</h1>
           <p className="text-sm text-[var(--text-secondary)]">
-            登入後即可使用 AI 分析（每日 10 次額度）
+            登入後即可使用 AI 分析（每日 3 次額度）
           </p>
         </div>
 
