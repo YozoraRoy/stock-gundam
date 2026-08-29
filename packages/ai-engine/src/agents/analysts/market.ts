@@ -12,7 +12,9 @@ Write a detailed technical analysis report covering:
 
 export function createMarketAnalyst(llm: LLMClient) {
   return async (state: AnalysisState): Promise<Partial<AnalysisState>> => {
-    const prompt = `Analyze ${state.ticker} as of ${state.tradeDate}. ${state.instrumentContext}`
+    const prompt = `Analyze ${state.ticker} as of ${state.tradeDate}. ${state.instrumentContext}
+
+${state.outputInstruction}`
     const report = await llm.generate(SYSTEM_PROMPT, prompt)
     return { marketReport: report }
   }

@@ -79,6 +79,8 @@ export function createTrader(llm: LLMClient) {
       `Investment Plan: ${state.investmentPlan}`,
       '',
       `Specify: action (Buy/Hold/Sell), reasoning, entry price, stop loss, and position sizing.`,
+      '',
+      state.outputInstruction,
     ].join('\n')
 
     const proposal = await llm.generateObject<z.infer<typeof TraderProposalSchema>>(

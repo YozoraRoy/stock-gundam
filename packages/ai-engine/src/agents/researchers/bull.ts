@@ -20,6 +20,8 @@ export function createBullResearcher(llm: LLMClient) {
       `Last bear argument: ${lastBear}`,
       '',
       `Build a strong bull case addressing the bear's concerns. Focus on growth potential, competitive advantages, and positive catalysts.`,
+      '',
+      state.outputInstruction,
     ].join('\n')
 
     const argument = `Bull Analyst: ${await llm.generate('You are a bullish stock analyst arguing for investment.', prompt)}`

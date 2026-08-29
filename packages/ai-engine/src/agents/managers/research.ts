@@ -35,6 +35,8 @@ export function createResearchManager(llm: LLMClient) {
       '',
       `Rate: Buy / Overweight / Hold / Underweight / Sell`,
       `Provide rationale and strategic actions.`,
+      '',
+      state.outputInstruction,
     ].join('\n')
 
     const plan = await llm.generateObject<{ recommendation: Rating; rationale: string; strategicActions: string }>(

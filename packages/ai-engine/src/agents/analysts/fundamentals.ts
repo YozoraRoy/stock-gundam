@@ -13,7 +13,9 @@ Cover:
 
 export function createFundamentalsAnalyst(llm: LLMClient) {
   return async (state: AnalysisState): Promise<Partial<AnalysisState>> => {
-    const prompt = `Analyze fundamentals for ${state.ticker} as of ${state.tradeDate}. ${state.instrumentContext}`
+    const prompt = `Analyze fundamentals for ${state.ticker} as of ${state.tradeDate}. ${state.instrumentContext}
+
+${state.outputInstruction}`
     const report = await llm.generate(SYSTEM_PROMPT, prompt)
     return { fundamentalsReport: report }
   }

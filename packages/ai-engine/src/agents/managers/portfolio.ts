@@ -36,6 +36,8 @@ export function createPortfolioManager(llm: LLMClient) {
       '',
       `Rating scale: Buy / Overweight / Hold / Underweight / Sell`,
       'Be decisive and ground every conclusion in specific evidence.',
+      '',
+      state.outputInstruction,
     ].join('\n')
 
     const decision = await llm.generateObject<z.infer<typeof PortfolioDecisionSchema>>(

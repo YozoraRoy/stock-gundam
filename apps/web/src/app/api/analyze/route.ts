@@ -1,5 +1,11 @@
 import { TradingEngine } from '@stock/ai-engine'
 import { saveAnalysisRecord, consumeAnalysisQuota } from '@stock/database'
+import {
+  DEFAULT_ANALYSIS_LANGUAGE,
+  AGENT_KEYS,
+  AGENT_KEY_SET,
+  type AnalysisLanguage,
+} from '@stock/core'
 import { DAILY_ANALYSIS_LIMIT, getCurrentUserFromCookies, getTaiwanDateStr } from '../../../lib/auth'
 
 let _engine: TradingEngine | null = null
@@ -19,9 +25,23 @@ function getEngine(): TradingEngine {
 
 export async function POST(req: Request) {
   try {
-    const { symbol, date } = await req.json()
+    const { symbol, date, language, agents } = await req.json()
     if (!symbol) {
       return new Response(JSON.stringify({ error: 'symbol required' }), { status: 400 })
+    }
+
+    const outputLanguage: AnalysisLanguage =
+      language === 'en' || language === 'zh-TW' ? language : DEFAULT_ANALYSIS_LANGUAGE
+
+    const enabledAgents = Array.isArray(agents)
+      ? agents.filter((a: unknown): a is string => typeof a === 'string' && AGENT_KEY_SET.has(a))
+      : [...AGENT_KEYS]
+
+    if (enabledAgents.length === 0) {
+      return new Response(JSON.stringify({ error: '至少需要啟用一個 Agent 才能進行 AI 分析。' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
 
     const user = await getCurrentUserFromCookies()
@@ -60,6 +80,7 @@ export async function POST(req: Request) {
             symbol,
             date ?? new Date().toISOString().split('T')[0],
             (step: string, detail: string) => send('progress', { step, detail }),
+            { language: outputLanguage, enabledAgents },
           )
 
           const modelPlan = engine.getModelPlan()
@@ -68,6 +89,8 @@ export async function POST(req: Request) {
             decision: state.finalDecision,
             tokenUsage,
             modelPlan,
+            language: outputLanguage,
+            enabledAgents,
             reports: {
               market: state.marketReport,
               sentiment: state.sentimentReport,

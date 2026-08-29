@@ -13,7 +13,9 @@ Cover:
 
 export function createNewsAnalyst(llm: LLMClient) {
   return async (state: AnalysisState): Promise<Partial<AnalysisState>> => {
-    const prompt = `Research latest news for ${state.ticker} as of ${state.tradeDate}. ${state.instrumentContext}`
+    const prompt = `Research latest news for ${state.ticker} as of ${state.tradeDate}. ${state.instrumentContext}
+
+${state.outputInstruction}`
     const report = await llm.generate(SYSTEM_PROMPT, prompt)
     return { newsReport: report }
   }

@@ -1,4 +1,14 @@
-import { type AnalysisState, AssetType, loadConfig } from '@stock/core'
+import {
+  type AnalysisState,
+  AssetType,
+  AGENT_KEYS,
+  AGENT_KEY_SET,
+  DEFAULT_ANALYSIS_LANGUAGE,
+  buildAnalysisLanguageInstruction,
+  type AnalysisLanguage,
+  type AppConfig,
+  loadConfig,
+} from '@stock/core'
 import { registry, yahooFinanceProvider } from '@stock/market-data'
 import { LLMFactory } from './llm/factory.js'
 import { FallbackClient } from './llm/fallback-client.js'
@@ -48,6 +58,14 @@ async function resolveSymbol(rawTicker: string): Promise<string> {
 
 export type ProgressCallback = (step: string, detail: string) => void
 
+export interface AnalyzeOptions {
+  assetType?: AssetType
+  /** 分析報告輸出語言，預設 zh-TW（繁體中文 + NTD）。 */
+  language?: AnalysisLanguage
+  /** 僅執行指定的 Agent（節點名稱需為 AGENT_KEYS 之一）。未提供時預設全數執行。 */
+  enabledAgents?: string[]
+}
+
 export interface ModelPlan {
   deep: string
   quick: string
@@ -66,21 +84,22 @@ export class TradingEngine {
   private signalProcessor = new SignalProcessor()
   private usageTracker = new LLMUsageTracker()
   private modelPlan: ModelPlan
+  private config: AppConfig
 
   constructor() {
     registry.register(yahooFinanceProvider)
 
-    const config = loadConfig()
+    this.config = loadConfig()
 
     const createClient = (model: string, provider?: string) => LLMFactory.create({
-      provider: provider ?? config.llmProvider,
+      provider: provider ?? this.config.llmProvider,
       model,
-      temperature: config.temperature,
-      baseUrl: provider !== 'google' ? config.backendUrl : undefined,
+      temperature: this.config.temperature,
+      baseUrl: provider !== 'google' ? this.config.backendUrl : undefined,
     })
 
-    this.deepLLM = createClient(config.deepThinkModel)
-    this.quickLLM = createClient(config.quickThinkModel)
+    this.deepLLM = createClient(this.config.deepThinkModel)
+    this.quickLLM = createClient(this.config.quickThinkModel)
 
     const fallbackProvider = process.env.FALLBACK_LLM_PROVIDER
     let fallbackPlan: ModelPlan['fallback'] = null
@@ -97,15 +116,15 @@ export class TradingEngine {
     }
 
     this.modelPlan = {
-      deep: config.deepThinkModel,
-      quick: config.quickThinkModel,
+      deep: this.config.deepThinkModel,
+      quick: this.config.quickThinkModel,
       fallback: fallbackPlan,
     }
 
     this.deepLLM = this.usageTracker.attach(this.deepLLM)
     this.quickLLM = this.usageTracker.attach(this.quickLLM)
 
-    this.memory = new MemoryLog(config.memoryLogPath)
+    this.memory = new MemoryLog(this.config.memoryLogPath)
     this.reflector = new Reflector(this.quickLLM)
   }
 
@@ -118,11 +137,25 @@ export class TradingEngine {
     ticker: string,
     tradeDate: string,
     onProgress?: ProgressCallback,
-    assetType: AssetType = AssetType.Stock,
+    options: AnalyzeOptions = {},
   ): Promise<{ state: AnalysisState; signal: string; tokenUsage: TokenUsageSummary }> {
     this.usageTracker.reset()
     onProgress?.('Symbol Normalizer', 'Resolving ticker symbol...')
     const resolvedTicker = await resolveSymbol(ticker)
+
+    const outputLanguage: AnalysisLanguage =
+      options.language ?? (this.config.outputLanguage as AnalysisLanguage) ?? DEFAULT_ANALYSIS_LANGUAGE
+    const outputInstruction = buildAnalysisLanguageInstruction(outputLanguage, this.config.twdUsdRate)
+
+    const requestedAgents = options.enabledAgents && options.enabledAgents.length > 0
+      ? options.enabledAgents
+      : [...AGENT_KEYS]
+    const enabledSet = new Set<string>(requestedAgents.filter(a => AGENT_KEY_SET.has(a)))
+    const activeKeys = AGENT_KEYS.filter(k => enabledSet.has(k))
+
+    if (activeKeys.length === 0) {
+      throw new Error('至少需要啟用一個 Agent 才能進行 AI 分析（目前已全部停用）。')
+    }
 
     let quoteContext = ''
     let profileContext = ''
@@ -185,9 +218,11 @@ ${historyContext}`
     const initialState: AnalysisState = {
       ticker: resolvedTicker,
       tradeDate,
-      assetType,
+      assetType: options.assetType ?? AssetType.Stock,
       instrumentContext,
       pastContext: this.memory.getPastContext(ticker),
+      outputLanguage,
+      outputInstruction,
       marketReport: '',
       sentimentReport: '',
       newsReport: '',
@@ -226,25 +261,29 @@ ${historyContext}`
       }
     }
 
-    graph.addNode('Market Analyst', wrap('Market Analyst', createMarketAnalyst(this.quickLLM)))
-    graph.addNode('Sentiment Analyst', wrap('Sentiment Analyst', createSentimentAnalyst(this.quickLLM)))
-    graph.addNode('News Analyst', wrap('News Analyst', createNewsAnalyst(this.quickLLM)))
-    graph.addNode('Fundamentals Analyst', wrap('Fundamentals Analyst', createFundamentalsAnalyst(this.quickLLM)))
-    graph.addNode('Bull Researcher', wrap('Bull Researcher', createBullResearcher(this.quickLLM)))
-    graph.addNode('Research Manager', wrap('Research Manager', createResearchManager(this.deepLLM)))
-    graph.addNode('Trader', wrap('Trader', createTrader(this.quickLLM)))
-    graph.addNode('Portfolio Manager', wrap('Portfolio Manager', createPortfolioManager(this.deepLLM)))
+    const nodeFactories: Array<[string, (s: AnalysisState) => Promise<Partial<AnalysisState>>]> = [
+      ['Market Analyst', createMarketAnalyst(this.quickLLM)],
+      ['Sentiment Analyst', createSentimentAnalyst(this.quickLLM)],
+      ['News Analyst', createNewsAnalyst(this.quickLLM)],
+      ['Fundamentals Analyst', createFundamentalsAnalyst(this.quickLLM)],
+      ['Bull Researcher', createBullResearcher(this.quickLLM)],
+      ['Research Manager', createResearchManager(this.deepLLM)],
+      ['Trader', createTrader(this.quickLLM)],
+      ['Portfolio Manager', createPortfolioManager(this.deepLLM)],
+    ]
 
-    graph.addEdge({ from: 'Market Analyst', to: 'Sentiment Analyst' })
-    graph.addEdge({ from: 'Sentiment Analyst', to: 'News Analyst' })
-    graph.addEdge({ from: 'News Analyst', to: 'Fundamentals Analyst' })
-    graph.addEdge({ from: 'Fundamentals Analyst', to: 'Bull Researcher' })
-    graph.addEdge({ from: 'Bull Researcher', to: 'Research Manager' })
-    graph.addEdge({ from: 'Research Manager', to: 'Trader' })
-    graph.addEdge({ from: 'Trader', to: 'Portfolio Manager' })
-    graph.addEdge({ from: 'Portfolio Manager', to: '__end__' })
+    const activeNodes = nodeFactories.filter(([key]) => enabledSet.has(key))
 
-    graph.setEntryPoint('Market Analyst')
+    for (const [name, fn] of activeNodes) {
+      graph.addNode(name, wrap(name, fn))
+    }
+
+    for (let i = 0; i < activeNodes.length - 1; i++) {
+      graph.addEdge({ from: activeNodes[i][0], to: activeNodes[i + 1][0] })
+    }
+    graph.addEdge({ from: activeNodes[activeNodes.length - 1][0], to: '__end__' })
+
+    graph.setEntryPoint(activeNodes[0][0])
 
     const finalState = await graph.execute(initialState)
     const signal = this.signalProcessor.process(finalState.finalDecision)

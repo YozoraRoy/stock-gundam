@@ -90,6 +90,8 @@ export interface AnalysisState {
   assetType: AssetType
   instrumentContext: string
   pastContext: string
+  outputLanguage: string
+  outputInstruction: string
   marketReport: string
   sentimentReport: string
   newsReport: string

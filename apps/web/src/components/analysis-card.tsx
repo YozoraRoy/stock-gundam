@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { TrendingUp, AlertTriangle, Newspaper, BarChart3, Target, Gauge } from 'lucide-react'
+import { TrendingUp, AlertTriangle, Newspaper, BarChart3, Target, Gauge, Languages, Settings2 } from 'lucide-react'
+import { AGENT_KEYS } from '@stock/core'
 
 interface AgentUsage {
   agent: string
@@ -27,6 +28,8 @@ interface AnalysisCardProps {
   analysis: {
     signal: string
     decision: string
+    language?: string
+    enabledAgents?: string[]
     tokenUsage?: TokenUsage
     modelPlan?: ModelPlan
     reports: {
@@ -64,9 +67,29 @@ const sections = [
 export function AnalysisCard({ analysis }: AnalysisCardProps) {
   const color = RATING_COLORS[analysis.signal] ?? 'text-[var(--text-primary)]'
   const bg = RATING_BG[analysis.signal] ?? 'bg-[var(--bg-card)]'
+  const isZh = analysis.language !== 'en'
+  const enabledCount = analysis.enabledAgents?.length ?? 0
 
   return (
     <div className="mt-8 space-y-6">
+      {(analysis.language || analysis.enabledAgents) && (
+        <div className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-secondary)]">
+          {analysis.language && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10">
+              <Languages className="w-3 h-3" />
+              {isZh ? '繁體中文 · 貨幣 NTD' : 'English'}
+            </span>
+          )}
+          {analysis.enabledAgents && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10">
+              <Settings2 className="w-3 h-3" />
+              {isZh
+                ? `啟用 Agents ${enabledCount}/${AGENT_KEYS.length}`
+                : `Agents ${enabledCount}/${AGENT_KEYS.length}`}
+            </span>
+          )}
+        </div>
+      )}
       <div className={`${bg} rounded-xl p-6 border`}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">

@@ -18,9 +18,10 @@ const STEPS = [
 
 interface ProgressPanelProps {
   progress: { step: string; detail: string }[]
+  enabledAgents?: string[]
 }
 
-export function ProgressPanel({ progress }: ProgressPanelProps) {
+export function ProgressPanel({ progress, enabledAgents }: ProgressPanelProps) {
   const lastEvent = progress[progress.length - 1]
   const currentStep = lastEvent?.detail === 'running...' ? lastEvent.step : null
 
@@ -43,8 +44,28 @@ export function ProgressPanel({ progress }: ProgressPanelProps) {
       </h3>
       <div className="space-y-2">
         {STEPS.map(({ key, label, icon: Icon }) => {
+          const isEnabled = !enabledAgents || enabledAgents.includes(key)
           const isDone = completed.has(key)
           const isCurrent = key === currentStep
+
+          if (!isEnabled) {
+            return (
+              <div
+                key={key}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg opacity-30"
+                title="此 Agent 已停用，不會執行"
+              >
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <span className="text-[10px] text-[var(--text-secondary)]">–</span>
+                </div>
+                <Icon className="w-4 h-4" />
+                <span className="text-sm">{label}</span>
+                <span className="text-[10px] text-[var(--text-secondary)] ml-auto">
+                  已停用
+                </span>
+              </div>
+            )
+          }
 
           if (!isDone && !isCurrent && completed.size === 0) {
             return null

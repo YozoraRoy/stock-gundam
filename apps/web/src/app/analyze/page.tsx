@@ -3,9 +3,11 @@
 import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { BarChart3, Brain, Search as SearchIcon, Clock, History, FileText, ChevronRight, Target, RefreshCw, Trash2, Zap } from 'lucide-react'
+import { AGENT_KEYS, type AnalysisLanguage } from '@stock/core'
 import { SearchBar } from '@/components/search-bar'
 import { AnalysisCard } from '@/components/analysis-card'
 import { ProgressPanel } from '@/components/progress-panel'
+import { AnalysisOptions } from '@/components/analysis-options'
 
 interface AnalysisRecord {
   id: number
@@ -31,6 +33,8 @@ function AnalyzeContent() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [language, setLanguage] = useState<AnalysisLanguage>('zh-TW')
+  const [enabledAgents, setEnabledAgents] = useState<string[]>([...AGENT_KEYS])
 
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -103,6 +107,10 @@ function AnalyzeContent() {
   }, [fetchHistory, symbolParam])
 
   const handleAnalyze = useCallback(async (symbol: string) => {
+    if (enabledAgents.length === 0) {
+      setError('至少須啟用一個 Agent 才能開始分析。請在「AI 分析設定」中啟用。')
+      return
+    }
     setLoading(true)
     setAnalysis(null)
     setError(null)
@@ -117,7 +125,12 @@ function AnalyzeContent() {
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
-        body: JSON.stringify({ symbol, date: new Date().toISOString().split('T')[0] }),
+        body: JSON.stringify({
+          symbol,
+          date: new Date().toISOString().split('T')[0],
+          language,
+          agents: enabledAgents,
+        }),
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
       })
@@ -188,7 +201,17 @@ function AnalyzeContent() {
       if (timerRef.current) clearInterval(timerRef.current)
       abortRef.current = null
     }
-  }, [fetchHistory])
+  }, [fetchHistory, language, enabledAgents])
+
+  const handleToggleAgent = useCallback((key: string) => {
+    setEnabledAgents(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
+    )
+  }, [])
+
+  const handleToggleAll = useCallback((enabled: boolean) => {
+    setEnabledAgents(enabled ? [...AGENT_KEYS] : [])
+  }, [])
 
   // 點擊歷史紀錄載入該報告
   const handleSelectHistoryRecord = (record: AnalysisRecord) => {
@@ -254,7 +277,7 @@ function AnalyzeContent() {
         <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-white/5">
           <Brain className="w-5 h-5 text-[var(--accent-green)] mb-2" />
           <div className="text-sm text-[var(--text-secondary)]">AI Analysis</div>
-          <div className="text-lg font-semibold">8 agents</div>
+          <div className="text-lg font-semibold">{enabledAgents.length}/8 agents</div>
         </div>
         <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-white/5">
           <Clock className="w-5 h-5 text-[var(--accent)] mb-2" />
@@ -265,10 +288,19 @@ function AnalyzeContent() {
 
       <SearchBar onSearch={handleAnalyze} loading={loading} />
 
+      <AnalysisOptions
+        language={language}
+        onLanguageChange={setLanguage}
+        enabledAgents={enabledAgents}
+        onToggleAgent={handleToggleAgent}
+        onToggleAll={handleToggleAll}
+        disabled={loading}
+      />
+
       <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
         {loading && (
           <div className="lg:col-span-1">
-            <ProgressPanel progress={progress} />
+            <ProgressPanel progress={progress} enabledAgents={enabledAgents} />
           </div>
         )}
 

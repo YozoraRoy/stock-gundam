@@ -12,7 +12,9 @@ Provide:
 
 export function createSentimentAnalyst(llm: LLMClient) {
   return async (state: AnalysisState): Promise<Partial<AnalysisState>> => {
-    const prompt = `Analyze sentiment for ${state.ticker} around ${state.tradeDate}. ${state.instrumentContext}`
+    const prompt = `Analyze sentiment for ${state.ticker} around ${state.tradeDate}. ${state.instrumentContext}
+
+${state.outputInstruction}`
     const report = await llm.generate(SYSTEM_PROMPT, prompt)
     return { sentimentReport: report }
   }
