@@ -87,8 +87,8 @@ jobs:
 
       - name: Deploy via Kudu zipdeploy (clean, small zip)
         run: |
-          echo "Stopping app to deploy cleanly (avoids volume remount race)..."
-          az webapp stop --name stock-platform-roy --resource-group rg-yuzora_roy_ai
+          echo "Ensuring app is Running (deploy cleanly without stopping to avoid SCM 502)..."
+          az webapp start --name stock-platform-roy --resource-group rg-yuzora_roy_ai || true
 
           echo "Getting deployment credentials..."
           az webapp deployment list-publishing-credentials \
@@ -111,6 +111,8 @@ jobs:
           if [ "$HTTP" != "200" ] && [ "$HTTP" != "201" ] && [ "$HTTP" != "202" ]; then
             echo "::error::zipdeploy failed (HTTP $HTTP)"
             cat /tmp/deploy_resp.txt
+            echo "Ensuring app is Running even though deploy failed..."
+            az webapp start --name stock-platform-roy --resource-group rg-yuzora_roy_ai || true
             exit 1
           fi
           echo "Upload accepted. Starting app..."
