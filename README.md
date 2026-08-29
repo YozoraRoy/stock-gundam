@@ -58,7 +58,6 @@ stock-platform/
 │   └── jobs/triggered/      # Azure WebJobs 自動排程配置 (14:30 每日爬蟲)
 ├── .agents/skills/
 │   └── azure-deploy/        # 專屬 Azure 部署與診斷技能 (SKILL.md)
-├── deploy.ps1               # Azure 一鍵自動部署腳本
 └── package.json             # npm workspaces 根目錄
 ```
 
@@ -121,11 +120,51 @@ npm run dev
 
 ---
 
+## 🔁 LLM 備援機制 (API Token 備援)
+
+系統支援 **Primary / Fallback 兩層模型備援**：Primary 模型失敗（rate limit、逾時、帳戶配額封鎖）時，自動切換至備援模型，並在該 Agent 的分析回報末尾附加一行備援 model + token 紀錄，同時保留 per-agent token 明細存入資料庫。
+
+### 分組
+
+模型分成 **deep** 與 **quick** 兩組，各自可獨立設定 primary / fallback：
+
+| 組別 | 使用 Agent |
+|------|-----------|
+| **deep** | Research Manager、Portfolio Manager |
+| **quick** | Market、Sentiment、News、Fundamentals、Bull Researcher、Trader |
+
+### 環境變數
+
+以「切到 Groq 免費 API」為例（OpenAI-compatible 端點）：
+
+```env
+FALLBACK_LLM_PROVIDER=openai
+
+FALLBACK_DEEP_THINK_MODEL=qwen/qwen3.8-27b
+FALLBACK_DEEP_LLM_BACKEND_URL=https://api.groq.com/openai/v1
+FALLBACK_DEEP_LLM_API_KEY=gsk_...
+
+FALLBACK_QUICK_THINK_MODEL=qwen/qwen3.8-27b
+FALLBACK_QUICK_LLM_BACKEND_URL=https://api.groq.com/openai/v1
+FALLBACK_QUICK_LLM_API_KEY=gsk_...
+```
+
+**優先序**：群組專屬 `FALLBACK_DEEP_*` / `FALLBACK_QUICK_*` > 通用 `FALLBACK_LLM_*` > 沿用 Primary（`LLM_BACKEND_URL` / `OPENAI_API_KEY`）。
+
+### 切換紀錄
+
+切換到備援模型時，會在該 Agent 回報末尾附加：
+> ⚠️ 本回覆已自動切換至備援模型：**{model}** (Token: prompt X / completion Y / 合計 Z)
+
+並在 `tokenUsage.agents` 中記錄每個 Agent 實際使用的 model、`usedFallback`、`fallbackCalls` 與 token 用量（存至 DB `model_usage` 欄位）。
+
+---
+
 ## 🌐 部署與 Skill (Azure Deployment)
 
-> **部署策略：GitHub Actions 自動部署為主，本機 `deploy.ps1` 手動部署為輔。**
+> **部署策略：一律透過 GitHub Actions (git runner) 自動部署。**
 
-### 🥇 主要方式：GitHub Actions 自動部署 (Primary)
+### 🚀 GitHub Actions 自動部署
 
 每次推送 `main` 分支即自動觸發部署 Workflow (`.github/workflows/deploy.yml`)：
 
@@ -143,6 +182,10 @@ git push origin main   # ← 自動觸發部署
 |--------|------|--------------------------|
 | `AZURE_CREDENTIALS` | Azure Service Principal JSON（`az ad sp create-for-rbac` 產生） | — |
 | `OPENAI_API_KEY` | OpenCode AI API Key | `OPENAI_API_KEY` |
+| `FALLBACK_DEEP_LLM_BACKEND_URL` | 備援（deep 組）免費 API 的 baseUrl，例 `https://api.groq.com/openai/v1`（可留空沿用 primary） | `FALLBACK_DEEP_LLM_BACKEND_URL` |
+| `FALLBACK_DEEP_LLM_API_KEY` | 備援（deep 組）免費 API 的 apiKey | `FALLBACK_DEEP_LLM_API_KEY` |
+| `FALLBACK_QUICK_LLM_BACKEND_URL` | 備援（quick 組）免費 API 的 baseUrl（可留空沿用 primary） | `FALLBACK_QUICK_LLM_BACKEND_URL` |
+| `FALLBACK_QUICK_LLM_API_KEY` | 備援（quick 組）免費 API 的 apiKey | `FALLBACK_QUICK_LLM_API_KEY` |
 | `DATABASE_URL` | SQL Server 連線字串 | `DATABASE_URL` |
 | `AUTH_SECRET` | 登入 JWT 簽章密鑰（`openssl rand -base64 32` 產生，禁止進 repo） | `AUTH_SECRET` |
 | `GOOGLE_CLIENT_ID` | Google OAuth 用戶端 ID | `GOOGLE_CLIENT_ID` |
@@ -153,20 +196,6 @@ git push origin main   # ← 自動觸發部署
 > `AUTH_BASE_URL` 為固定值 `https://stock-platform-roy.azurewebsites.net`，直接寫死在 `deploy.yml`，不需設為 Secret。部署時 `deploy.yml` 會把上表各 Secret 寫入 Azure App Settings。
 
 **線上監看**：`gh run watch` 或 GitHub → Actions 頁面。
-
-### 🥈 備援方式：本機手動部署 (Backup)
-
-當 GitHub Actions 不可用（例如連線問題、急修、或需要帶入本機尚未推送的設定時），改用本機一鍵腳本：
-
-```bash
-powershell -ExecutionPolicy Bypass -File ./deploy.ps1
-```
-
-* 本機會先執行 `npm run local-build`，再用 `tar.exe` 打包 Zip 並以 `az webapp deploy` 上傳。
-* 注意：`deploy.ps1` 會以 `$env:OPENAI_API_KEY` 覆寫 Azure 的 `OPENAI_API_KEY`，**若未設定環境變數請手動帶入**：
-  ```powershell
-  $env:OPENAI_API_KEY="sk-xxx"; powershell -ExecutionPolicy Bypass -File ./deploy.ps1
-  ```
 
 專案已內建專屬的 **Azure 部署 Skill**（含常見錯誤診斷手冊）：[SKILL.md](file:///d:/PG/stock-platform/.agents/skills/azure-deploy/SKILL.md)
 
@@ -239,7 +268,6 @@ openssl rand -base64 32
 
 - 本機開發：`apps/web/.env.local`（參考根目錄 `.env.example`）
 - 上線 CI：`.github/workflows/deploy.yml` 會把 GitHub Secrets 寫入 Azure App Settings
-- 備援手動部署：`deploy.ps1`（讀取本機環境變數）
 
 #### 常見問題
 
@@ -251,3 +279,33 @@ LINE 不允許 localhost callback，請用 `/api/auth/dev-login` 或先在線上
 
 * **線上體驗網站**：[https://stock-platform-roy.azurewebsites.net](https://stock-platform-roy.azurewebsites.net)
 * **GitHub 倉庫**：[https://github.com/YozoraRoy/stock-gundam](https://github.com/YozoraRoy/stock-gundam)
+
+---
+
+## 📄 License
+
+本專案採用 **MIT License**（詳見 [`LICENSE`](./LICENSE)）。
+
+```text
+MIT License
+
+Copyright (c) 2026 Yuzora Roy
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

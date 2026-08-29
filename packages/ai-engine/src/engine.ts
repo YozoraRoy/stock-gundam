@@ -14,7 +14,7 @@ import { LLMFactory } from './llm/factory.js'
 import { FallbackClient } from './llm/fallback-client.js'
 import { LLMUsageTracker } from './llm/usage.js'
 import type { LLMClient } from './llm/client.js'
-import type { TokenUsageSummary } from './llm/usage.js'
+import type { TokenUsageSummary, AgentUsage } from './llm/usage.js'
 import { WorkflowGraph } from './graph/workflow.js'
 import { MemoryLog } from './graph/memory.js'
 import { Reflector } from './graph/reflection.js'
@@ -73,6 +73,10 @@ export interface ModelPlan {
     provider: string
     deep: string
     quick: string
+    deepBaseUrl?: string
+    quickBaseUrl?: string
+    deepApiKeyHint?: string
+    quickApiKeyHint?: string
   } | null
 }
 
@@ -101,17 +105,70 @@ export class TradingEngine {
     this.deepLLM = createClient(this.config.deepThinkModel)
     this.quickLLM = createClient(this.config.quickThinkModel)
 
+    // ── Fallback 支援 deep/quick 兩組各自獨立 ──
+    // 每個 group（deep / quick）可各自指定不同的 fallback model、baseUrl 與 apiKey，
+    // 達到「每個 agent 群各自的免費 API token 備援」。
+    // 環境變數優先序：
+    //   群組專屬 (FALLBACK_DEEP_*) > 通用 (FALLBACK_LLM_*) > 沿用 primary。
     const fallbackProvider = process.env.FALLBACK_LLM_PROVIDER
     let fallbackPlan: ModelPlan['fallback'] = null
     if (fallbackProvider) {
       const fallbackDeepModel = process.env.FALLBACK_DEEP_THINK_MODEL ?? 'gemini-2.5-flash'
       const fallbackQuickModel = process.env.FALLBACK_QUICK_THINK_MODEL ?? 'gemini-2.5-flash'
-      this.deepLLM = new FallbackClient(this.deepLLM, createClient(fallbackDeepModel, fallbackProvider))
-      this.quickLLM = new FallbackClient(this.quickLLM, createClient(fallbackQuickModel, fallbackProvider))
+
+      const createFallbackClient = (
+        model: string,
+        group: 'deep' | 'quick',
+      ): LLMClient => {
+        const groupPrefix = group === 'deep' ? 'FALLBACK_DEEP_' : 'FALLBACK_QUICK_'
+        const baseUrl =
+          process.env[`${groupPrefix}LLM_BACKEND_URL`]?.trim() ||
+          process.env.FALLBACK_LLM_BACKEND_URL?.trim() ||
+          (fallbackProvider !== 'google' ? this.config.backendUrl : '') ||
+          undefined
+        const apiKey =
+          process.env[`${groupPrefix}LLM_API_KEY`]?.trim() ||
+          process.env[`${groupPrefix}OPENAI_API_KEY`]?.trim() ||
+          process.env.FALLBACK_LLM_API_KEY?.trim() ||
+          process.env.FALLBACK_OPENAI_API_KEY?.trim() ||
+          undefined
+        return LLMFactory.create({
+          provider: fallbackProvider,
+          model,
+          apiKey,
+          baseUrl,
+          temperature: this.config.temperature,
+        })
+      }
+
+      this.deepLLM = new FallbackClient(this.deepLLM, createFallbackClient(fallbackDeepModel, 'deep'))
+      this.quickLLM = new FallbackClient(this.quickLLM, createFallbackClient(fallbackQuickModel, 'quick'))
       fallbackPlan = {
         provider: fallbackProvider,
         deep: fallbackDeepModel,
         quick: fallbackQuickModel,
+        deepBaseUrl:
+          process.env.FALLBACK_DEEP_LLM_BACKEND_URL?.trim() ||
+          process.env.FALLBACK_LLM_BACKEND_URL?.trim() ||
+          (fallbackProvider !== 'google' ? this.config.backendUrl : '') ||
+          undefined,
+        quickBaseUrl:
+          process.env.FALLBACK_QUICK_LLM_BACKEND_URL?.trim() ||
+          process.env.FALLBACK_LLM_BACKEND_URL?.trim() ||
+          (fallbackProvider !== 'google' ? this.config.backendUrl : '') ||
+          undefined,
+        deepApiKeyHint: this.apiKeyHint(
+          process.env.FALLBACK_DEEP_LLM_API_KEY ||
+            process.env.FALLBACK_DEEP_OPENAI_API_KEY ||
+            process.env.FALLBACK_LLM_API_KEY ||
+            process.env.FALLBACK_OPENAI_API_KEY,
+        ),
+        quickApiKeyHint: this.apiKeyHint(
+          process.env.FALLBACK_QUICK_LLM_API_KEY ||
+            process.env.FALLBACK_QUICK_OPENAI_API_KEY ||
+            process.env.FALLBACK_LLM_API_KEY ||
+            process.env.FALLBACK_OPENAI_API_KEY,
+        ),
       }
     }
 
@@ -131,6 +188,14 @@ export class TradingEngine {
   /** 回傳每個 agent 階層所設定的 primary/fallback 模型清單，用於 DB 記錄與 UI 呈現。 */
   getModelPlan(): ModelPlan {
     return this.modelPlan
+  }
+
+  /** 把 apiKey 遮罩成前綴提示（例如 sk-abc...），避免明文外洩又方便辨識是哪一把 key。 */
+  private apiKeyHint(key: string | undefined): string | undefined {
+    if (!key) return undefined
+    const k = key.trim()
+    if (!k) return undefined
+    return k.length <= 8 ? `${k}...` : `${k.substring(0, 8)}...`
   }
 
   async analyze(
@@ -251,11 +316,43 @@ ${historyContext}`
 
     const graph = new WorkflowGraph()
 
+    // agent 名稱 → 該 agent 產出的報告欄位（字串）；用於 fallback 時在末尾附加備援說明。
+    const reportFieldByAgent: Record<string, keyof AnalysisState> = {
+      'Market Analyst': 'marketReport',
+      'Sentiment Analyst': 'sentimentReport',
+      'News Analyst': 'newsReport',
+      'Fundamentals Analyst': 'fundamentalsReport',
+      'Research Manager': 'investmentPlan',
+      'Trader': 'traderProposal',
+      'Portfolio Manager': 'finalDecision',
+    }
+
+    const formatFallbackNote = (u: AgentUsage): string =>
+      `\n\n---\n_⚠️ 本回覆已自動切換至備援模型：**${u.model}** (Token: prompt ${u.promptTokens} / completion ${u.completionTokens} / 合計 ${u.totalTokens})_`
+
+    const appendFallbackNote = (
+      result: Partial<AnalysisState>,
+      name: string,
+      usage: AgentUsage | null,
+    ) => {
+      if (!usage?.usedFallback) return
+      const field = reportFieldByAgent[name]
+      if (field && typeof result[field] === 'string') {
+        ;(result as Record<string, any>)[field] += formatFallbackNote(usage)
+      } else if (name === 'Bull Researcher' && result.investDebate?.currentResponse) {
+        result.investDebate = {
+          ...result.investDebate,
+          currentResponse: result.investDebate.currentResponse + formatFallbackNote(usage),
+        }
+      }
+    }
+
     const wrap = (name: string, fn: (s: AnalysisState) => Promise<Partial<AnalysisState>>) => {
       return async (s: AnalysisState) => {
         onProgress?.(name, 'running...')
         this.usageTracker.setCurrentAgent(name)
         const result = await fn(s)
+        appendFallbackNote(result, name, this.usageTracker.getAgent(name))
         onProgress?.(name, 'done')
         return result
       }

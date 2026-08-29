@@ -17,7 +17,8 @@ export class LLMFactory {
     if (provider === 'openai') {
       return new OpenAICompatibleClient({
         ...config,
-        apiKey: process.env.OPENAI_API_KEY || config.apiKey || '',
+        // 顯式傳入的 apiKey（例如 fallback 專用 key）優先於全域 OPENAI_API_KEY
+        apiKey: config.apiKey || process.env.OPENAI_API_KEY || '',
         baseUrl: config.baseUrl ?? 'https://api.openai.com/v1',
       })
     }

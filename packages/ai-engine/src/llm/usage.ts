@@ -68,6 +68,22 @@ export class LLMUsageTracker {
     return client
   }
 
+  /** 回傳單一 agent 的用量快照；不存在時回傳 null。 */
+  getAgent(agent: string): AgentUsage | null {
+    const usage = this.byAgent.get(agent)
+    if (!usage) return null
+    const totalTokens = usage.promptTokens + usage.completionTokens
+    return {
+      agent,
+      model: usage.model,
+      usedFallback: usage.fallbackCalls > 0,
+      fallbackCalls: usage.fallbackCalls,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens,
+    }
+  }
+
   getSummary(): TokenUsageSummary {
     const agents: AgentUsage[] = []
     let totalPrompt = 0

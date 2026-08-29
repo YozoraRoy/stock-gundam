@@ -79,7 +79,6 @@ openssl rand -base64 32
 
 - 本機開發：`apps/web/.env.local`（參考根目錄 `.env.example`）
 - 上線 CI：`.github/workflows/deploy.yml` 會把 GitHub Secrets 寫入 Azure App Settings
-- 備援手動部署：`deploy.ps1`（讀取本機環境變數）
 
 ---
 
