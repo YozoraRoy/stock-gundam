@@ -5,6 +5,7 @@ export {
   savePortfolioRecord, getPortfolioRecords,
   getHistoricalGifts, ensureSeedData,
   getUserById, getUserIdentities, findOrCreateUser, getUsageCount, consumeAnalysisQuota,
+  getRecognitionUsage, consumeRecognitionQuota,
   deleteAnalysisRecord,
 } from './db.js'
 export type { AnalysisRecord, PortfolioRecord, PortfolioRecordInput, HistoricalGift, UserRow, UserIdentityRow, AuthProvider, IdentityInput, QuotaResult } from './db.js'

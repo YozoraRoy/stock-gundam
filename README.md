@@ -1,12 +1,33 @@
 # Stock Gundam 台灣股票 AI 分析與零股紀念品情報平台
 
-基於 Next.js 15 與多 AI 代理人 (Multi-Agent Architecture) 打造的台灣股票與美股 AI 深度分析、零股盤後行情與股東會紀念品情報平台。
+基於 Next.js 15 與多 AI 代理人 (Multi-Agent Architecture) 打造的台灣股票與美股 AI 深度分析、零股盤後行情、股東會紀念品情報與個人損益試算平台。
 
 ---
 
 ## 🌟 最新功能與核心特色 (2026 最新升級)
 
-### 1. 🎁 零股行情與股東會紀念品情報 (`/odd-lot`)
+### 0. 🗺️ 功能與頁面一覽
+
+| 頁面 | 路由 | 說明 | 需登入 |
+|------|------|------|--------|
+| 🏠 首頁 | `/` | 功能入口與簡介 | 否 |
+| 🤖 深度 AI 分析 | `/analyze` | 8-Agent 台股/美股深度分析（每日額度） | 是 |
+| 🎁 零股情報 | `/odd-lot` | 零股行情與股東會紀念品情報 | 否 |
+| 💰 個人損益試算 | `/portfolio` | 損益試算 + AI 圖片辨識批次上傳 + AI 投資建議 + 歷史紀錄 | 是 |
+| 🔐 登入 | `/login` | Google / LINE OAuth 登入 | 否 |
+| 📄 隱私權政策 | `/privacy` | 隱私政策頁面 | 否 |
+| 📄 服務條款 | `/terms` | 使用條款頁面 | 否 |
+
+### 1. 💰 個人損益試算與 AI 投資建議 (`/portfolio`)
+* **多市場持倉輸入**：支援台股（純數字代號自動帶入 `.TW`/`.TWO`）與美股，填寫持有股數、每股成本，系統自動抓取即時報價（可手動覆蓋現價）與股息，即時計算成本、市值、未實現損益與總報酬率（含 Yield on Cost）。
+* **📷 AI 圖片辨識批次上傳持股**：直接上傳／拖曳券商 App 持股截圖或對帳單照片（PNG/JPG，≤10MB），AI 自動辨識出多檔股票的市場、代號、名稱、股數、成本、現價與股息，可逐檔修改／刪除後「全部建立損益紀錄」。Vision 依賴 LLM 的圖片輸入能力（Google `gemini` 或 OpenAI 相容 endpoint），失敗自動切換備援模型。
+* **5 大投資法則 (Investment Frameworks)**：套用 **巴菲特價值投資**、成長股投資、股息投資、動能投資與均衡配置等框架，交由 AI 產出 `BUY / HOLD / SELL / AVOID` 建議與理由。
+* **AI 分析 SSE 串流**：`POST /api/portfolio/analyze` 以 Server-Sent Events 回傳分析進度與結果；自動抓取公司簡介與即時報價作為市場上下文。
+* **圖片辨識 API**：`GET /api/portfolio/recognize`（查剩餘額度）/ `POST /api/portfolio/recognize`（multipart file 或 JSON base64 上傳辨識）。
+* **個人歷史紀錄**：每次分析自動存入 `portfolio_records` 資料表，可在頁面展開歷史明細（含當時價格與 AI 建議）。
+* **共用每日額度**：AI 損益分析與 `/analyze` 共用每日 3 次額度（`consumeAnalysisQuota`）；圖片辨識另有獨立 **每日 10 次** 額度（`consumeRecognitionQuota`，存於 `recognition_usage` 資料表），避免資源被濫用。
+
+### 2. 🎁 零股行情與股東會紀念品情報 (`/odd-lot`)
 * **TWSE 盤後零股官方 OpenAPI 直連**：介接證交所官方 OpenAPI (`TWT53U`)，載入全台灣上千檔零股成交價格與成交股數。
 * **1 股單價與成交總金額雙欄位**：精準拆分為 **`💵 1股成交價`**（顯示例如 `NT$ 25.60`）與 **`💰 成交總金額`**（顯示例如 `NT$ 66.4 萬`），修復數值排序與多重複算問題。
 * **紀念品智慧自動分類與 7 大頁籤篩選 (Filter Pills)**：
@@ -24,19 +45,23 @@
   * **開盤上班日推算**：自動避開國定假日與週末休市，標明「最新開盤上班日」資訊。
   * **帶年份與跨年標示**：最後買進日格式化為 **`YYYY/MM/DD (週X)`**（例 `2026/04/22 (週三)`），若跨年自動加上 **`跨年`** 專屬標籤。
 
-### 2. 🤖 專屬 `verifier-agent` (檢查驗證 Agent)
+### 3. 🤖 專屬 `verifier-agent` (檢查驗證 Agent)
 * **自動進程管理**：每次修改後自動檢查 Port 3000，若有舊 dev 伺服器會強制關閉並重啟乾淨的 `localhost:3000`。
 * **SQL 數據與 API HTTP 三層自動化測試**：自動連線 SQLite 資料庫 (`stock.db`) 核對關鍵欄位，並實測 `GET /api/odd-lot` 與 `GET /api/gifts/history` HTTP 回應。
 
-### 3. ⚡ 股票代號智慧自動補全與 0.3 秒熔斷門禁 (Early-Exit Guard)
+### 4. ⚡ 股票代號智慧自動補全與 0.3 秒熔斷門禁 (Early-Exit Guard)
 * **台股代號智慧補全**：輸入純數字台股代號（例如 `2330` 或 `0050`），系統自動辨識並補充 `.TW`（上市）或 `.TWO`（上櫃），無需使用者手動打副檔名。
 * **無效代號 0.3 秒熔斷門禁**：在 8 個 AI 代理人啟動前進行實時數據驗證。若輸入無效代碼，系統在 **0.3 秒內立即中斷阻斷**並給予親切提示，**絕不白白浪費等待時間與 LLM API 額度**。
 
-### 4. ⏰ Azure 雙重定時自動排程機制 (WebJobs & Cron API)
+### 5. 🔐 Google / LINE 登入與每日額度 (OAuth)
+* **Google / LINE OAuth 登入**：`/login` 頁面提供 Google 與 LINE 登入（LINE 採用 OpenID `openid profile` scope，email 為可選欄位）。
+* **每日 3 次 AI 額度**：登入後每日可進行 3 次深度分析（`consumeAnalysisQuota`，以台灣時區為準），超過即回 `429 Too Many`，額度紀錄存於 `analysis_quota` 資料表。
+
+### 6. ⏰ Azure 雙重定時自動排程機制 (WebJobs & Cron API)
 * **Azure WebJobs 雲端內建排程**：台灣時間每個工作日下午 **14:30** 盤後自動啟動 TWSE 零股與 `stock.gift` 雙爬蟲與 eGift 智慧正規化，無縫更新資料庫。
 * **Cron HTTP API 端點 (`/api/cron/seed`)**：提供 API 端點支援外部 Cron 服務（如 Azure Logic Apps, GitHub Actions）隨時觸發全台爬蟲！
 
-### 🛡️ 4. 數據持久化與防洗資料保護 (Data Loss Prevention)
+### 🛡️ 7. 數據持久化與防洗資料保護 (Data Loss Prevention)
 * **資料庫路徑**：`DATABASE_PATH=/home/data/stock.db`（鎖定於 Azure NFS 持久化硬碟區）。
 * **防洗資料保護**：系統會嚴格檢查持久化資料庫，一旦檔案存在**絕對不進行任何覆蓋/重寫操作**，**100% 永久保留使用者的歷史 AI 分析紀錄與盤後資料**！
 
@@ -48,11 +73,13 @@
 stock-platform/
 ├── apps/
 │   └── web/                 # Next.js 15 Web 應用程式 (App Router)
+│       ├── src/app/         # 頁面與 API 路由 (/analyze /odd-lot /portfolio …)
+│       └── src/lib/         # 共享邏輯 (auth、oauth、portfolio 等)
 ├── packages/
-│   ├── ai-engine/           # AI 8-Agent 分析引擎與 Symbol Guard 門禁
+│   ├── ai-engine/           # AI 8-Agent 分析引擎、Symbol Guard 門禁與投資法則分析
 │   ├── backtest/            # 回測引擎
 │   ├── core/                # 共享型別、設定與錯誤定義
-│   ├── database/            # SQLite 資料庫與雙爬蟲 (TWSE & stock.gift)
+│   ├── database/            # SQLite/SQL Server 資料庫 (雙爬蟲、analysis_quota、portfolio_records)
 │   └── market-data/         # Yahoo Finance 市場數據 Provider
 ├── App_Data/
 │   └── jobs/triggered/      # Azure WebJobs 自動排程配置 (14:30 每日爬蟲)
@@ -107,7 +134,7 @@ npm run dev
 
 ## 🤖 8-Agent AI 分析流程
 
-對股票進行分析時，系統會循序執行 8 個 AI 代理人：
+對股票進行分析時，系統會循序執行 8 個 AI 代理人（`/analyze`，需登入）：
 
 1. **Market Technical Analyst** — K 線圖、均線、技術指標分析
 2. **Sentiment Analyst** — 市場情緒與社群討論風向
@@ -117,6 +144,8 @@ npm run dev
 6. **Research Manager** — 綜合評估 → 產出 Buy/Hold/Sell 評級
 7. **Trader** — 具體交易計畫與進出場策略
 8. **Portfolio Manager** — 最終投資決策與風險控制
+
+> 每個 Agent 可獨立啟用/停用（`/api/analyze` 接受 `enabledAgents` 參數），並支援語言選擇（英文/繁體中文）與貨幣（USD / NTD）。輸入支援台股代號自動補全，無效代號在 0.3 秒內被熔斷阻擋，不浪費額度與等待時間。
 
 ---
 

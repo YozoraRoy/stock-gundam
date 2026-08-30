@@ -6,6 +6,7 @@ import { getUserById, getUserIdentities, type UserRow } from '@stock/database'
 
 export const COOKIE_NAME = 'stock_session'
 export const DAILY_ANALYSIS_LIMIT = 3
+export const DAILY_RECOGNITION_LIMIT = 10
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
 /** 管理者判定：LINE 帳號 Roy（可透過 ADMIN_LINE_USER_IDS 指定 LINE User ID 覆寫）。 */

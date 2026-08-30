@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp } from 'lucide-react'
+import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp, Upload, Trash2, CheckCircle2 } from 'lucide-react'
 
 type Market = 'tw' | 'us'
 
@@ -59,6 +59,16 @@ interface HistoryItem {
   created_at: string
 }
 
+interface RecognizedPosition {
+  market: Market
+  symbol: string
+  symbolName?: string
+  shares: number
+  cost: number
+  currentPrice: number
+  dividend: number
+}
+
 const RATING_STYLE: Record<string, { text: string; bg: string }> = {
   BUY: { text: 'text-[var(--accent-green)]', bg: 'var(--accent-green)' },
   HOLD: { text: 'text-[var(--accent)]', bg: 'var(--accent)' },
@@ -108,6 +118,12 @@ export default function PortfolioPage() {
 
   const abortRef = useRef<AbortController | null>(null)
 
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [recognizing, setRecognizing] = useState(false)
+  const [recognitionQuota, setRecognitionQuota] = useState<{ used: number; max: number; remaining: number } | null>(null)
+  const [recognized, setRecognized] = useState<Array<RecognizedPosition & { saved?: boolean }>>([])
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
   const buildPayload = () => {
     const nShares = num(shares)
     const nCost = num(cost)
@@ -148,6 +164,155 @@ export default function PortfolioPage() {
     } catch (e) {
       console.error('Failed to fetch portfolio history:', e)
     }
+  }
+
+  const fetchRecognitionQuota = async () => {
+    try {
+      const res = await fetch('/api/portfolio/recognize')
+      const data = await res.json()
+      if (data && typeof data.remaining === 'number') setRecognitionQuota(data)
+    } catch {}
+  }
+
+  useEffect(() => {
+    fetchRecognitionQuota()
+  }, [])
+
+  const resizeImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(new Error('讀取圖片失敗'))
+      reader.onload = () => {
+        const img = new Image()
+        img.onerror = () => reject(new Error('圖片格式無法辨識'))
+        img.onload = () => {
+          const MAX = 1600
+          let { width, height } = img
+          if (width > MAX || height > MAX) {
+            const ratio = Math.min(MAX / width, MAX / height)
+            width = Math.round(width * ratio)
+            height = Math.round(height * ratio)
+          }
+          const canvas = document.createElement('canvas')
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('無法處理圖片'))
+            return
+          }
+          ctx.drawImage(img, 0, 0, width, height)
+          resolve(canvas.toDataURL('image/jpeg', 0.85))
+        }
+        img.src = reader.result as string
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleRecognize = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('請上傳圖片檔（PNG/JPG 等）')
+      return
+    }
+    setError(null)
+    setRecognizing(true)
+    setRecognized([])
+    try {
+      const preview = await resizeImage(file)
+      setImagePreview(preview)
+      const res = await fetch('/api/portfolio/recognize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: preview }),
+      })
+      const data = await res.json()
+      if (data.error) {
+        setError(data.error)
+        if (typeof data?.quota?.used === 'number') setRecognitionQuota(data.quota)
+        setRecognizing(false)
+        return
+      }
+      const positions = (data.positions ?? []).map((p: RecognizedPosition) => ({
+        market: p.market === 'us' ? 'us' : 'tw',
+        symbol: p.symbol,
+        symbolName: p.symbolName,
+        shares: p.shares,
+        cost: p.cost,
+        currentPrice: p.currentPrice,
+        dividend: p.dividend ?? 0,
+        saved: false,
+      }))
+      setRecognized(positions)
+      if (data.quota) setRecognitionQuota(data.quota)
+      if (positions.length === 0) setError('未辨識到任何股票，請確認圖片清楚後重試')
+    } catch (e: any) {
+      setError(e.message || '辨識失敗，請再試一次')
+    } finally {
+      setRecognizing(false)
+    }
+  }
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleRecognize(file)
+    e.target.value = ''
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleRecognize(file)
+  }
+
+  const updateRecognized = (index: number, patch: Partial<RecognizedPosition> & { saved?: boolean }) => {
+    setRecognized((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch, saved: false } : p)))
+  }
+
+  const saveRecognizedPosition = async (p: RecognizedPosition & { saved?: boolean }, index: number) => {
+    try {
+      const res = await fetch('/api/portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          market: p.market,
+          symbol: p.symbol.toUpperCase(),
+          shares: p.shares,
+          cost: p.cost,
+          currentPrice: p.currentPrice,
+          dividend: p.dividend ?? 0,
+          symbolName: p.symbolName || undefined,
+          strategyId,
+        }),
+      })
+      const data = await res.json()
+      if (data.error) {
+        setError(`「${p.symbol}」存檔失敗：${data.error}`)
+        return false
+      }
+      updateRecognized(index, { saved: true })
+      await fetchHistory()
+      return true
+    } catch {
+      setError(`「${p.symbol}」存檔發生錯誤`)
+      return false
+    }
+  }
+
+  const saveAllRecognized = async () => {
+    const pending = recognized.map((p, i) => ({ p, i })).filter((x) => !x.p.saved)
+    let ok = 0
+    for (const { p, i } of pending) {
+      const r = await saveRecognizedPosition(p, i)
+      if (r) ok++
+    }
+    setNotice(ok > 0 ? `已建立 ${ok} 筆持股紀錄` : null)
+  }
+
+  const clearRecognition = () => {
+    setImagePreview(null)
+    setRecognized([])
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   useEffect(() => {
@@ -311,6 +476,147 @@ export default function PortfolioPage() {
           <h1 className="text-2xl font-bold">個人損益試算</h1>
           <p className="text-sm text-[var(--text-secondary)]">輸入持有部位，試算損益並套用投資法則取得 AI 建議</p>
         </div>
+      </div>
+
+      {/* AI 圖片辨識上傳 */}
+      <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-6 mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-medium flex items-center gap-2">
+            <Upload className="w-4 h-4 text-[var(--accent)]" />
+            AI 圖片辨識上傳持股
+          </h2>
+          {recognitionQuota != null && (
+            <span className="text-xs text-[var(--text-secondary)]">
+              今日剩餘辨識次數：<span className={recognitionQuota.remaining > 0 ? 'text-[var(--accent-green)]' : 'text-red-400'}>{recognitionQuota.remaining}</span> / {recognitionQuota.max}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-[var(--text-secondary)] mb-4">上傳券商 App 持股截圖或對帳單照片，AI 自動辨識多檔股票，逐檔建立損益紀錄。</p>
+
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
+        <div
+          onDragOver={e => e.preventDefault()}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className="cursor-pointer border-2 border-dashed border-white/10 hover:border-[var(--accent)] rounded-xl p-8 text-center transition group"
+        >
+          <Upload className="w-10 h-10 mx-auto mb-3 text-[var(--text-secondary)] group-hover:text-[var(--accent)] transition" />
+          {recognizing ? (
+            <p className="text-sm text-[var(--text-secondary)]">AI 辨識中，請稍候...</p>
+          ) : (
+            <>
+              <p className="text-sm text-[var(--text-primary)]">點擊或拖曳圖片到此處</p>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">支援 PNG / JPG，最多 10MB（Screenshot / 拍照皆可）</p>
+            </>
+          )}
+        </div>
+
+        {imagePreview && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <img src={imagePreview} alt="上傳預覽" className="max-h-64 w-auto rounded-lg border border-white/10" />
+            </div>
+            {recognized.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-[var(--accent-green)]">辨識到 {recognized.length} 檔持股</p>
+                  <button
+                    type="button"
+                    onClick={() => setRecognized([])}
+                    className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  >
+                    清除結果
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {recognized.map((p, i) => (
+                    <div key={i} className="border border-white/10 rounded-lg p-3 space-y-2">
+                      <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                        <div className="flex gap-2 items-center text-sm">
+                          <select
+                            value={p.market}
+                            onChange={e => updateRecognized(i, { market: e.target.value as Market })}
+                            className="bg-[var(--bg-secondary)] border border-white/10 rounded px-1 py-0.5 text-xs"
+                          >
+                            <option value="tw">台股</option>
+                            <option value="us">美股</option>
+                          </select>
+                          <input
+                            value={p.symbol}
+                            onChange={e => updateRecognized(i, { symbol: e.target.value.toUpperCase() })}
+                            className="w-20 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-0.5 text-sm"
+                          />
+                          <input
+                            value={p.symbolName ?? ''}
+                            placeholder="名稱"
+                            onChange={e => updateRecognized(i, { symbolName: e.target.value })}
+                            className="w-24 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-0.5 text-sm"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRecognized(prev => prev.filter((_, j) => j !== i))}
+                          className="text-[var(--text-secondary)] hover:text-red-400"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 text-xs">
+                        <label className="flex flex-col gap-0.5">
+                          <span className="text-[var(--text-secondary)]">股數</span>
+                          <input type="number" min="0" value={p.shares} onChange={e => updateRecognized(i, { shares: Number(e.target.value) || 0 })} className="bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1" />
+                        </label>
+                        <label className="flex flex-col gap-0.5">
+                          <span className="text-[var(--text-secondary)]">成本</span>
+                          <input type="number" min="0" step="0.01" value={p.cost} onChange={e => updateRecognized(i, { cost: Number(e.target.value) || 0 })} className="bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1" />
+                        </label>
+                        <label className="flex flex-col gap-0.5">
+                          <span className="text-[var(--text-secondary)]">現價</span>
+                          <input type="number" min="0" step="0.01" value={p.currentPrice} onChange={e => updateRecognized(i, { currentPrice: Number(e.target.value) || 0 })} className="bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1" />
+                        </label>
+                        <label className="flex flex-col gap-0.5">
+                          <span className="text-[var(--text-secondary)]">股息</span>
+                          <input type="number" min="0" step="0.01" value={p.dividend} onChange={e => updateRecognized(i, { dividend: Number(e.target.value) || 0 })} className="bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1" />
+                        </label>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={p.saved}
+                          onClick={() => saveRecognizedPosition(p, i)}
+                          className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition ${p.saved ? 'bg-[var(--accent-green)]/20 text-[var(--accent-green)]' : 'bg-white/10 hover:bg-white/15'}`}
+                        >
+                          {p.saved ? <><CheckCircle2 className="w-3.5 h-3.5" /> 已存檔</> : '建立損益紀錄'}
+                        </button>
+                        {p.saved && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await fetchHistory()
+                              setNotice(`「${p.symbol}」紀錄已更新`)
+                              setExpandedId(null)
+                            }}
+                            className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                          >
+                            查看紀錄
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={saveAllRecognized}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent-green)] text-white text-sm font-medium hover:opacity-90 transition"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  全部建立損益紀錄
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

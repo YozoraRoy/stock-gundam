@@ -65,4 +65,25 @@ export class FallbackClient implements LLMClient {
       return out
     }
   }
+
+  async generateWithImage(systemPrompt: string, userPrompt: string, imageDataUrl: string): Promise<string> {
+    if (this.primary.generateWithImage) {
+      try {
+        const out = await this.primary.generateWithImage(systemPrompt, userPrompt, imageDataUrl)
+        this.lastModel = this.primary.model
+        this._onCall?.({ model: this.primary.model, usedFallback: false })
+        return out
+      } catch (e: any) {
+        console.warn(`[Fallback] Primary image call failed: ${e.message}`)
+      }
+    }
+    if (!this.fallback.generateWithImage) {
+      throw new Error('Neither primary nor fallback LLM supports image input')
+    }
+    this.fallbackCalls++
+    const out = await this.fallback.generateWithImage(systemPrompt, userPrompt, imageDataUrl)
+    this.lastModel = this.fallback.model
+    this._onCall?.({ model: this.fallback.model, usedFallback: true })
+    return out
+  }
 }

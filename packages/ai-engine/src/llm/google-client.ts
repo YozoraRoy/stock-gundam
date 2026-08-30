@@ -83,6 +83,30 @@ export class GoogleClient implements LLMClient {
     })
   }
 
+  async generateWithImage(systemPrompt: string, userPrompt: string, imageDataUrl: string): Promise<string> {
+    return withRetry(async () => {
+      await this.waitForQuota()
+      const { text, usage } = await generateText({
+        model: this.provider(this.config.model),
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: userPrompt },
+              { type: 'image', image: imageDataUrl },
+            ],
+          },
+        ],
+        temperature: this.config.temperature,
+        maxRetries: 0,
+      })
+      this.reportUsage(usage)
+      this.onCall?.({ model: this.config.model, usedFallback: false })
+      return text
+    })
+  }
+
   async generateObject<T>(systemPrompt: string, userPrompt: string, schema: any): Promise<T> {
     return withRetry(async () => {
       await this.waitForQuota()

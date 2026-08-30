@@ -15,3 +15,5 @@ export type {
   PortfolioAdvice,
   PortfolioAnalysisResult,
 } from './portfolio.js'
+export { recognizePortfolioImage } from './recognize-image.js'
+export type { RecognizedPosition, RecognizePortfolioImageResult } from './recognize-image.js'

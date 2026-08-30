@@ -20,7 +20,7 @@ export default function Home() {
           <Search className="w-8 h-8 text-[var(--accent)] mb-4" />
           <h2 className="text-lg font-semibold mb-2">AI 智能分析</h2>
           <p className="text-sm text-[var(--text-secondary)]">
-            輸入股票代號，啟動 9 個 AI 智能體進行市場、情緒、新聞、基本面多維度分析。
+            輸入股票代號，啟動 8 個 AI 智能體進行市場、情緒、新聞、基本面多維度分析。
           </p>
         </Link>
 

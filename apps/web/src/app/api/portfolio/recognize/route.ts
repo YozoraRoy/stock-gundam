@@ -1,0 +1,84 @@
+import { NextResponse } from 'next/server'
+import { recognizePortfolioImage } from '@stock/ai-engine'
+import { consumeRecognitionQuota, getRecognitionUsage } from '@stock/database'
+import { DAILY_RECOGNITION_LIMIT, getCurrentUserFromCookies, getTaiwanDateStr } from '../../../../lib/auth'
+
+export const runtime = 'nodejs'
+export const maxDuration = 120
+
+/** 回傳今日剩餘辨識額度。 */
+export async function GET() {
+  const user = await getCurrentUserFromCookies()
+  if (!user) {
+    return NextResponse.json({ error: 'login required' }, { status: 401 })
+  }
+  const used = await getRecognitionUsage(user.id, getTaiwanDateStr())
+  return NextResponse.json({
+    used,
+    max: DAILY_RECOGNITION_LIMIT,
+    remaining: Math.max(0, DAILY_RECOGNITION_LIMIT - used),
+  })
+}
+
+/** 上傳圖片（multipart file 或 JSON base64）並由 AI 辨識多檔持股。 */
+export async function POST(req: Request) {
+  try {
+    const user = await getCurrentUserFromCookies()
+    if (!user) {
+      return NextResponse.json({ error: 'login required' }, { status: 401 })
+    }
+
+    let imageDataUrl: string | null = null
+
+    const contentType = req.headers.get('content-type') || ''
+    if (contentType.includes('multipart/form-data')) {
+      const form = await req.formData()
+      const file = form.get('image')
+      if (!(file instanceof File)) {
+        return NextResponse.json({ error: '缺少圖片檔案 (image)' }, { status: 400 })
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        return NextResponse.json({ error: '圖片不能超過 10MB' }, { status: 400 })
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      let base64 = ''
+      for (const b of bytes) base64 += String.fromCharCode(b)
+      const type = file.type || 'image/png'
+      imageDataUrl = `data:${type};base64,${btoa(base64)}`
+    } else {
+      const body = await req.json().catch(() => null)
+      const raw = typeof body?.image === 'string' ? body.image : ''
+      if (!raw.startsWith('data:image/')) {
+        // also accept bare base64
+        imageDataUrl = /^[A-Za-z0-9+/=]+$/.test(raw) ? `data:image/png;base64,${raw}` : null
+      } else {
+        imageDataUrl = raw
+      }
+      if (!imageDataUrl) {
+        return NextResponse.json({ error: '請提供圖片 (image)' }, { status: 400 })
+      }
+    }
+
+    const quota = await consumeRecognitionQuota(user.id, getTaiwanDateStr(), DAILY_RECOGNITION_LIMIT)
+    if (!quota.allowed) {
+      return NextResponse.json(
+        {
+          error: `今日圖片辨識額度已用完（${quota.used}/${quota.max}），請明天再試`,
+          quota,
+        },
+        { status: 429 },
+      )
+    }
+
+    const result = await recognizePortfolioImage(imageDataUrl)
+
+    return NextResponse.json({
+      success: true,
+      ...result,
+      quota,
+    })
+  } catch (e: any) {
+    const status = e?.message?.includes('額度') ? 429 : 500
+    return NextResponse.json({ error: e.message || '圖片辨識失敗' }, { status })
+  }
+}

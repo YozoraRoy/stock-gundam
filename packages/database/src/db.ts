@@ -157,6 +157,14 @@ function getSqliteDb(): Database.Database | null {
         UNIQUE(user_id, usage_date)
       );
       CREATE INDEX IF NOT EXISTS idx_api_usage_user ON api_usage(user_id);
+      CREATE TABLE IF NOT EXISTS recognition_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        usage_date TEXT NOT NULL,
+        count INTEGER DEFAULT 0,
+        UNIQUE(user_id, usage_date)
+      );
+      CREATE INDEX IF NOT EXISTS idx_recognition_usage_user ON recognition_usage(user_id);
       CREATE TABLE IF NOT EXISTS portfolio_records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
@@ -318,6 +326,14 @@ async function getAzurePool(): Promise<sql.ConnectionPool | null> {
           CONSTRAINT uq_api_usage UNIQUE (user_id, usage_date)
         );
         CREATE INDEX idx_api_usage_user ON api_usage(user_id);
+        CREATE TABLE recognition_usage (
+          id         INT IDENTITY(1,1) PRIMARY KEY,
+          user_id    INT NOT NULL,
+          usage_date NVARCHAR(10) NOT NULL,
+          count      INT DEFAULT 0,
+          CONSTRAINT uq_recognition_usage UNIQUE (user_id, usage_date)
+        );
+        CREATE INDEX idx_recognition_usage_user ON recognition_usage(user_id);
         CREATE TABLE portfolio_records (
           id                   INT IDENTITY(1,1) PRIMARY KEY,
           user_id              INT NOT NULL,
@@ -1449,6 +1465,79 @@ export async function consumeAnalysisQuota(userId: number, date: string, max: nu
     return { allowed, used, remaining: Math.max(0, max - used), max }
   } catch (e) {
     console.error('[SQLite] consumeAnalysisQuota error:', e)
+    return { allowed: false, used: 0, remaining: 0, max }
+  }
+}
+
+export async function getRecognitionUsage(userId: number, date: string): Promise<number> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (!pool) return 0
+    try {
+      const result = await pool.request()
+        .input('uid', sql.Int, userId)
+        .input('d', sql.NVarChar(10), date)
+        .query('SELECT count FROM recognition_usage WHERE user_id = @uid AND usage_date = @d')
+      return Number(result.recordset[0]?.count ?? 0)
+    } catch (e) {
+      console.error('[AzureSQL] getRecognitionUsage error:', e)
+      return 0
+    }
+  }
+
+  const db = getSqliteDb()
+  if (!db) return 0
+  try {
+    const row = db.prepare('SELECT count FROM recognition_usage WHERE user_id = ? AND usage_date = ?').get(userId, date) as { count: number } | undefined
+    return Number(row?.count ?? 0)
+  } catch (e) {
+    console.error('[SQLite] getRecognitionUsage error:', e)
+    return 0
+  }
+}
+
+/**
+ * Atomically consume one image-recognition quota for the given user/date.
+ * Separate from `consumeAnalysisQuota` (uses its own table/limit).
+ */
+export async function consumeRecognitionQuota(userId: number, date: string, max: number): Promise<QuotaResult> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (!pool) return { allowed: false, used: 0, remaining: 0, max }
+    try {
+      await pool.request()
+        .input('uid', sql.Int, userId)
+        .input('d', sql.NVarChar(10), date)
+        .query(`
+          IF NOT EXISTS (SELECT 1 FROM recognition_usage WHERE user_id = @uid AND usage_date = @d)
+          BEGIN
+            INSERT INTO recognition_usage (user_id, usage_date, count) VALUES (@uid, @d, 0)
+          END
+        `)
+      const res = await pool.request()
+        .input('uid', sql.Int, userId)
+        .input('d', sql.NVarChar(10), date)
+        .input('max', sql.Int, max)
+        .query('UPDATE recognition_usage SET count = count + 1 WHERE user_id = @uid AND usage_date = @d AND count < @max')
+      const allowed = (res.rowsAffected[0] ?? 0) > 0
+      const used = await getRecognitionUsage(userId, date)
+      return { allowed, used, remaining: Math.max(0, max - used), max }
+    } catch (e) {
+      console.error('[AzureSQL] consumeRecognitionQuota error:', e)
+      return { allowed: false, used: 0, remaining: 0, max }
+    }
+  }
+
+  const db = getSqliteDb()
+  if (!db) return { allowed: false, used: 0, remaining: 0, max }
+  try {
+    db.prepare('INSERT OR IGNORE INTO recognition_usage (user_id, usage_date, count) VALUES (?, ?, 0)').run(userId, date)
+    const res = db.prepare('UPDATE recognition_usage SET count = count + 1 WHERE user_id = ? AND usage_date = ? AND count < ?').run(userId, date, max)
+    const allowed = res.changes > 0
+    const used = await getRecognitionUsage(userId, date)
+    return { allowed, used, remaining: Math.max(0, max - used), max }
+  } catch (e) {
+    console.error('[SQLite] consumeRecognitionQuota error:', e)
     return { allowed: false, used: 0, remaining: 0, max }
   }
 }

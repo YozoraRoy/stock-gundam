@@ -1,6 +1,10 @@
 import type { LLMClient, LLMConfig, LLMCallInfo, LLMUsage } from './client.js'
 import { AIError } from '@stock/core'
 
+type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export class OpenAICompatibleClient implements LLMClient {
   onUsage?: (usage: LLMUsage) => void
   onCall?: (info: LLMCallInfo) => void
@@ -38,7 +42,20 @@ export class OpenAICompatibleClient implements LLMClient {
     }
   }
 
-  private async callAPI(messages: { role: string; content: string }[]): Promise<string> {
+  async generateWithImage(systemPrompt: string, userPrompt: string, imageDataUrl: string): Promise<string> {
+    return this.callAPI([
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: userPrompt },
+          { type: 'image_url', image_url: { url: imageDataUrl } },
+        ] as ContentPart[],
+      },
+    ])
+  }
+
+  private async callAPI(messages: { role: string; content: string | ContentPart[] }[]): Promise<string> {
     const maxRetries = 3
     const timeoutMs = Number(process.env.LLM_TIMEOUT_MS) || 180_000
     const maxTokens = Number(process.env.LLM_MAX_TOKENS) || 8192
