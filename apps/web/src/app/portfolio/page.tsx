@@ -512,107 +512,159 @@ export default function PortfolioPage() {
         </div>
 
         {imagePreview && (
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <img src={imagePreview} alt="上傳預覽" className="max-h-64 w-auto rounded-lg border border-white/10" />
-            </div>
-            {recognized.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-[var(--accent-green)]">辨識到 {recognized.length} 檔持股</p>
-                  <button
-                    type="button"
-                    onClick={() => setRecognized([])}
-                    className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  >
-                    清除結果
-                  </button>
-                </div>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {recognized.map((p, i) => (
-                    <div key={i} className="border border-white/10 rounded-lg p-3 space-y-2">
-                      <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
-                        <div className="flex gap-2 items-center text-sm">
-                          <select
-                            value={p.market}
-                            onChange={e => updateRecognized(i, { market: e.target.value as Market })}
-                            className="bg-[var(--bg-secondary)] border border-white/10 rounded px-1 py-0.5 text-xs"
-                          >
-                            <option value="tw">台股</option>
-                            <option value="us">美股</option>
-                          </select>
-                          <input
-                            value={p.symbol}
-                            onChange={e => updateRecognized(i, { symbol: e.target.value.toUpperCase() })}
-                            className="w-20 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-0.5 text-sm"
-                          />
-                          <input
-                            value={p.symbolName ?? ''}
-                            placeholder="名稱"
-                            onChange={e => updateRecognized(i, { symbolName: e.target.value })}
-                            className="w-24 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-0.5 text-sm"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setRecognized(prev => prev.filter((_, j) => j !== i))}
-                          className="text-[var(--text-secondary)] hover:text-red-400"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-4 gap-2 text-xs">
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-[var(--text-secondary)]">股數</span>
-                          <input type="number" min="0" value={p.shares} onChange={e => updateRecognized(i, { shares: Number(e.target.value) || 0 })} className="bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1" />
-                        </label>
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-[var(--text-secondary)]">成本</span>
-                          <input type="number" min="0" step="0.01" value={p.cost} onChange={e => updateRecognized(i, { cost: Number(e.target.value) || 0 })} className="bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1" />
-                        </label>
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-[var(--text-secondary)]">現價</span>
-                          <input type="number" min="0" step="0.01" value={p.currentPrice} onChange={e => updateRecognized(i, { currentPrice: Number(e.target.value) || 0 })} className="bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1" />
-                        </label>
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-[var(--text-secondary)]">股息</span>
-                          <input type="number" min="0" step="0.01" value={p.dividend} onChange={e => updateRecognized(i, { dividend: Number(e.target.value) || 0 })} className="bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1" />
-                        </label>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={p.saved}
-                          onClick={() => saveRecognizedPosition(p, i)}
-                          className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition ${p.saved ? 'bg-[var(--accent-green)]/20 text-[var(--accent-green)]' : 'bg-white/10 hover:bg-white/15'}`}
-                        >
-                          {p.saved ? <><CheckCircle2 className="w-3.5 h-3.5" /> 已存檔</> : '建立損益紀錄'}
-                        </button>
-                        {p.saved && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              await fetchHistory()
-                              setNotice(`「${p.symbol}」紀錄已更新`)
-                              setExpandedId(null)
-                            }}
-                            className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                          >
-                            查看紀錄
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+          <div className="mt-4">
+            <div className="flex items-start gap-4 mb-4">
+              <img src={imagePreview} alt="上傳預覽" className="max-h-40 w-auto rounded-lg border border-white/10" />
+              <div className="text-sm">
+                <p className="font-medium text-[var(--text-primary)]">
+                  {recognized.length > 0
+                    ? <>辨識到 <span className="text-[var(--accent-green)]">{recognized.length}</span> 檔持股，請確認下方欄位</>
+                    : '上傳成功，等待 AI 辨識...'}
+                </p>
                 <button
                   type="button"
-                  onClick={saveAllRecognized}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent-green)] text-white text-sm font-medium hover:opacity-90 transition"
+                  onClick={clearRecognition}
+                  className="mt-2 text-xs text-[var(--text-secondary)] hover:text-red-400"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  全部建立損益紀錄
+                  清除結果與圖片
                 </button>
+              </div>
+            </div>
+
+            {recognized.length > 0 && (
+              <div className="space-y-3">
+                <div className="overflow-x-auto rounded-xl border border-white/10">
+                  <table className="w-full text-xs min-w-[720px]">
+                    <thead>
+                      <tr className="text-left text-[var(--text-secondary)] border-b border-white/10 bg-[var(--bg-secondary)]/50">
+                        <th className="px-2 py-2 font-medium">#</th>
+                        <th className="px-2 py-2 font-medium">市場</th>
+                        <th className="px-2 py-2 font-medium">代號</th>
+                        <th className="px-2 py-2 font-medium">名稱</th>
+                        <th className="px-2 py-2 font-medium">股數</th>
+                        <th className="px-2 py-2 font-medium">每股成本</th>
+                        <th className="px-2 py-2 font-medium">現價</th>
+                        <th className="px-2 py-2 font-medium">股息</th>
+                        <th className="px-2 py-2 font-medium">狀態</th>
+                        <th className="px-2 py-2 font-medium text-right">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recognized.map((p, i) => (
+                        <tr key={i} className={`border-b border-white/5 ${p.saved ? 'opacity-60' : ''}`}>
+                          <td className="px-2 py-2 text-[var(--text-secondary)]">{i + 1}</td>
+                          <td className="px-2 py-2">
+                            <select
+                              value={p.market}
+                              onChange={e => updateRecognized(i, { market: e.target.value as Market })}
+                              className="bg-[var(--bg-secondary)] border border-white/10 rounded px-1 py-1"
+                            >
+                              <option value="tw">台股</option>
+                              <option value="us">美股</option>
+                            </select>
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              value={p.symbol}
+                              onChange={e => updateRecognized(i, { symbol: e.target.value.toUpperCase() })}
+                              className="w-20 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              value={p.symbolName ?? ''}
+                              placeholder="名稱"
+                              onChange={e => updateRecognized(i, { symbolName: e.target.value })}
+                              className="w-24 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="number" min="0" value={p.shares}
+                              onChange={e => updateRecognized(i, { shares: Number(e.target.value) || 0 })}
+                              className="w-24 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="number" min="0" step="0.01" value={p.cost}
+                              onChange={e => updateRecognized(i, { cost: Number(e.target.value) || 0 })}
+                              className="w-24 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="number" min="0" step="0.01" value={p.currentPrice}
+                              onChange={e => updateRecognized(i, { currentPrice: Number(e.target.value) || 0 })}
+                              className="w-24 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="number" min="0" step="0.01" value={p.dividend}
+                              onChange={e => updateRecognized(i, { dividend: Number(e.target.value) || 0 })}
+                              className="w-24 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            {p.saved ? (
+                              <span className="flex items-center gap-1 text-[var(--accent-green)]">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> 已存檔
+                              </span>
+                            ) : (
+                              <span className="text-[var(--text-secondary)]">未存</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center justify-end gap-2">
+                              {p.saved ? (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await fetchHistory()
+                                    setNotice(`「${p.symbol}」紀錄已更新`)
+                                    setExpandedId(null)
+                                  }}
+                                  className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                >
+                                  查看紀錄
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => saveRecognizedPosition(p, i)}
+                                  className="text-[var(--accent)] hover:text-[var(--accent-green)]"
+                                >
+                                  建立
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setRecognized(prev => prev.filter((_, j) => j !== i))}
+                                className="text-[var(--text-secondary)] hover:text-red-400"
+                                title="刪除此列"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <p className="text-xs text-[var(--text-secondary)]">可逐一修改欄位，確認無誤後再建立損益紀錄；修改欄位會重置為「未存」。</p>
+                  <button
+                    type="button"
+                    onClick={saveAllRecognized}
+                    className="shrink-0 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent-green)] text-white text-sm font-medium hover:opacity-90 transition"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    全部建立損益紀錄
+                  </button>
+                </div>
               </div>
             )}
           </div>
