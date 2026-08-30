@@ -1,4 +1,4 @@
-import { TrendingUp, Search, PieChart, BookOpen } from 'lucide-react'
+import { TrendingUp, Search, PieChart, Wallet } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -35,13 +35,16 @@ export default function Home() {
           </p>
         </Link>
 
-        <div className="bg-[var(--bg-card)] rounded-xl p-6 border border-white/5 opacity-60 text-left">
-          <BookOpen className="w-8 h-8 text-[var(--text-secondary)] mb-4" />
-          <h2 className="text-lg font-semibold mb-2">更多功能</h2>
+        <Link
+          href="/portfolio"
+          className="bg-[var(--bg-card)] rounded-xl p-6 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left"
+        >
+          <Wallet className="w-8 h-8 text-[var(--accent-green)] mb-4" />
+          <h2 className="text-lg font-semibold mb-2">個人損益試算</h2>
           <p className="text-sm text-[var(--text-secondary)]">
-            回測引擎、市場掃描、投資組合管理（即將推出）。
+            輸入持有部位試算損益，套用巴菲特價值投資等法則取得 AI 買賣建議。
           </p>
-        </div>
+        </Link>
       </div>
     </div>
   )

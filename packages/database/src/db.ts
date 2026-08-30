@@ -26,6 +26,8 @@ let _poolFailed = false
 let _giftsSeeded = false
 const memoryStore: AnalysisRecord[] = []
 let memoryIdCounter = 1
+const portfolioMemoryStore: PortfolioRecord[] = []
+let portfolioMemoryIdCounter = 1
 
 // ─── SQLite connection ───────────────────────────────────────────
 function getSqliteDb(): Database.Database | null {
@@ -155,6 +157,30 @@ function getSqliteDb(): Database.Database | null {
         UNIQUE(user_id, usage_date)
       );
       CREATE INDEX IF NOT EXISTS idx_api_usage_user ON api_usage(user_id);
+      CREATE TABLE IF NOT EXISTS portfolio_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        market TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        symbol_name TEXT,
+        shares REAL NOT NULL,
+        cost REAL NOT NULL,
+        current_price REAL NOT NULL,
+        dividend REAL NOT NULL,
+        cost_basis REAL NOT NULL,
+        market_value REAL NOT NULL,
+        unrealized_pnl REAL NOT NULL,
+        unrealized_pnl_pct REAL NOT NULL,
+        total_return REAL NOT NULL,
+        total_return_pct REAL NOT NULL,
+        yield_on_cost REAL NOT NULL,
+        strategy TEXT,
+        recommendation TEXT,
+        summary TEXT,
+        report_json TEXT,
+        created_at TEXT DEFAULT (datetime('now', 'localtime'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_portfolio_user ON portfolio_records(user_id, id);
 
       UPDATE odd_lot_trades SET price = 34.15, volume = 19443, bid_price = 34.15, bid_volume = 8943, ask_price = 34.20, ask_volume = 6092 WHERE stock_id = '2887';
       UPDATE shareholder_gifts SET gift_name = '多用途矽膠隔熱餐墊(二入)', last_buy_date = '08/14' WHERE stock_id = '2887';
@@ -292,6 +318,30 @@ async function getAzurePool(): Promise<sql.ConnectionPool | null> {
           CONSTRAINT uq_api_usage UNIQUE (user_id, usage_date)
         );
         CREATE INDEX idx_api_usage_user ON api_usage(user_id);
+        CREATE TABLE portfolio_records (
+          id                   INT IDENTITY(1,1) PRIMARY KEY,
+          user_id              INT NOT NULL,
+          market               NVARCHAR(10) NOT NULL,
+          symbol               NVARCHAR(30) NOT NULL,
+          symbol_name          NVARCHAR(255),
+          shares               FLOAT NOT NULL,
+          cost                 FLOAT NOT NULL,
+          current_price        FLOAT NOT NULL,
+          dividend             FLOAT NOT NULL,
+          cost_basis           FLOAT NOT NULL,
+          market_value         FLOAT NOT NULL,
+          unrealized_pnl       FLOAT NOT NULL,
+          unrealized_pnl_pct   FLOAT NOT NULL,
+          total_return         FLOAT NOT NULL,
+          total_return_pct     FLOAT NOT NULL,
+          yield_on_cost        FLOAT NOT NULL,
+          strategy             NVARCHAR(50),
+          recommendation       NVARCHAR(20),
+          summary              NVARCHAR(MAX),
+          report_json          NVARCHAR(MAX),
+          created_at           DATETIME DEFAULT GETDATE()
+        );
+        CREATE INDEX idx_portfolio_user ON portfolio_records(user_id, id);
       END
     `)
 
@@ -850,6 +900,187 @@ export async function getAnalysisRecords(limit: number = 20, symbol?: string): P
     return memoryStore.filter(r => r.ticker.toUpperCase().includes(cleanSymbol)).slice(0, limit)
   }
   return memoryStore.slice(0, limit)
+}
+
+// ─── Portfolio Records ───────────────────────────────────────────
+export interface PortfolioRecord {
+  id?: number
+  user_id: number
+  market: 'tw' | 'us'
+  symbol: string
+  symbol_name?: string | null
+  shares: number
+  cost: number
+  current_price: number
+  dividend: number
+  cost_basis: number
+  market_value: number
+  unrealized_pnl: number
+  unrealized_pnl_pct: number
+  total_return: number
+  total_return_pct: number
+  yield_on_cost: number
+  strategy?: string | null
+  recommendation?: string | null
+  summary?: string | null
+  report_json?: string | null
+  created_at?: string
+}
+
+export interface PortfolioRecordInput {
+  user_id: number
+  market: 'tw' | 'us'
+  symbol: string
+  symbolName?: string | null
+  shares: number
+  cost: number
+  currentPrice: number
+  dividend: number
+  costBasis: number
+  marketValue: number
+  unrealizedPnl: number
+  unrealizedPnlPct: number
+  totalReturn: number
+  totalReturnPct: number
+  yieldOnCost: number
+  strategy?: string | null
+  recommendation?: string | null
+  summary?: string | null
+  reportJson?: string | null
+}
+
+const PORTFOLIO_COLUMNS =
+  'id, user_id, market, symbol, symbol_name, shares, cost, current_price, dividend, cost_basis, market_value, ' +
+  'unrealized_pnl, unrealized_pnl_pct, total_return, total_return_pct, yield_on_cost, strategy, recommendation, summary, report_json, created_at'
+
+export async function savePortfolioRecord(record: PortfolioRecordInput): Promise<number> {
+  const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19)
+  const reportStr = record.reportJson ?? null
+  const summaryStr = record.summary ?? null
+  const strategyStr = record.strategy ?? null
+  const recommendationStr = record.recommendation ?? null
+  const symbolName = record.symbolName ?? null
+  let insertedId = -1
+
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (pool) {
+      try {
+        const result = await pool.request()
+          .input('userId', sql.Int, record.user_id)
+          .input('market', sql.NVarChar(10), record.market)
+          .input('symbol', sql.NVarChar(30), record.symbol)
+          .input('symbolName', sql.NVarChar(255), symbolName)
+          .input('shares', sql.Float, record.shares)
+          .input('cost', sql.Float, record.cost)
+          .input('currentPrice', sql.Float, record.currentPrice)
+          .input('dividend', sql.Float, record.dividend)
+          .input('costBasis', sql.Float, record.costBasis)
+          .input('marketValue', sql.Float, record.marketValue)
+          .input('pnl', sql.Float, record.unrealizedPnl)
+          .input('pnlPct', sql.Float, record.unrealizedPnlPct)
+          .input('totalReturn', sql.Float, record.totalReturn)
+          .input('totalReturnPct', sql.Float, record.totalReturnPct)
+          .input('yieldOnCost', sql.Float, record.yieldOnCost)
+          .input('strategy', sql.NVarChar(50), strategyStr)
+          .input('recommendation', sql.NVarChar(20), recommendationStr)
+          .input('summary', sql.NVarChar(sql.MAX), summaryStr)
+          .input('report', sql.NVarChar(sql.MAX), reportStr)
+          .query(`
+            INSERT INTO portfolio_records (
+              user_id, market, symbol, symbol_name, shares, cost, current_price, dividend, cost_basis, market_value,
+              unrealized_pnl, unrealized_pnl_pct, total_return, total_return_pct, yield_on_cost, strategy, recommendation, summary, report_json
+            ) VALUES (
+              @userId, @market, @symbol, @symbolName, @shares, @cost, @currentPrice, @dividend, @costBasis, @marketValue,
+              @pnl, @pnlPct, @totalReturn, @totalReturnPct, @yieldOnCost, @strategy, @recommendation, @summary, @report
+            );
+            SELECT SCOPE_IDENTITY() AS id
+          `)
+        insertedId = Number(result.recordset?.[0]?.id ?? -1)
+      } catch (e) {
+        console.error('[AzureSQL] savePortfolioRecord error:', e)
+      }
+    }
+  } else {
+    const db = getSqliteDb()
+    if (db) {
+      try {
+        const info = db.prepare(`
+          INSERT INTO portfolio_records (
+            user_id, market, symbol, symbol_name, shares, cost, current_price, dividend, cost_basis, market_value,
+            unrealized_pnl, unrealized_pnl_pct, total_return, total_return_pct, yield_on_cost, strategy, recommendation, summary, report_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          record.user_id, record.market, record.symbol, symbolName, record.shares, record.cost, record.currentPrice,
+          record.dividend, record.costBasis, record.marketValue, record.unrealizedPnl, record.unrealizedPnlPct,
+          record.totalReturn, record.totalReturnPct, record.yieldOnCost, strategyStr, recommendationStr, summaryStr, reportStr,
+        )
+        insertedId = Number(info.lastInsertRowid)
+      } catch (e) {
+        console.error('[SQLite] savePortfolioRecord error:', e)
+      }
+    }
+  }
+
+  const id = insertedId > 0 ? insertedId : portfolioMemoryIdCounter++
+  const row: PortfolioRecord = {
+    id,
+    user_id: record.user_id,
+    market: record.market,
+    symbol: record.symbol,
+    symbol_name: symbolName,
+    shares: record.shares,
+    cost: record.cost,
+    current_price: record.currentPrice,
+    dividend: record.dividend,
+    cost_basis: record.costBasis,
+    market_value: record.marketValue,
+    unrealized_pnl: record.unrealizedPnl,
+    unrealized_pnl_pct: record.unrealizedPnlPct,
+    total_return: record.totalReturn,
+    total_return_pct: record.totalReturnPct,
+    yield_on_cost: record.yieldOnCost,
+    strategy: strategyStr,
+    recommendation: recommendationStr,
+    summary: summaryStr,
+    report_json: reportStr,
+    created_at: nowStr,
+  }
+  portfolioMemoryStore.unshift(row)
+  return id
+}
+
+export async function getPortfolioRecords(userId: number, limit: number = 20): Promise<PortfolioRecord[]> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (pool) {
+      try {
+        const result = await pool.request()
+          .input('userId', sql.Int, userId)
+          .input('limit', sql.Int, limit)
+          .query(`
+            SELECT TOP (@limit) ${PORTFOLIO_COLUMNS}
+            FROM portfolio_records WHERE user_id = @userId ORDER BY id DESC
+          `)
+        return result.recordset as PortfolioRecord[]
+      } catch (e) {
+        console.error('[AzureSQL] getPortfolioRecords error:', e)
+      }
+    }
+  } else {
+    const db = getSqliteDb()
+    if (db) {
+      try {
+        return db.prepare(`
+          SELECT ${PORTFOLIO_COLUMNS}
+          FROM portfolio_records WHERE user_id = ? ORDER BY id DESC LIMIT ?
+        `).all(userId, limit) as PortfolioRecord[]
+      } catch (e) {
+        console.error('[SQLite] getPortfolioRecords error:', e)
+      }
+    }
+  }
+  return portfolioMemoryStore.filter(r => r.user_id === userId).slice(0, limit)
 }
 
 export async function getAnalysisRecordById(id: number): Promise<AnalysisRecord | undefined> {

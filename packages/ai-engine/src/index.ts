@@ -4,3 +4,14 @@ export type { AgentFactory } from './types.js'
 export * from './llm/factory.js'
 export { LLMUsageTracker } from './llm/usage.js'
 export type { AgentUsage, TokenUsageSummary } from './llm/usage.js'
+export {
+  INVESTMENT_FRAMEWORKS,
+  getFramework,
+  runPortfolioAnalysis,
+} from './portfolio.js'
+export type {
+  InvestmentFramework,
+  PortfolioAnalysisInput,
+  PortfolioAdvice,
+  PortfolioAnalysisResult,
+} from './portfolio.js'

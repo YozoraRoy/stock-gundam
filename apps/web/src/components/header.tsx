@@ -9,6 +9,7 @@ const navItems = [
   { label: '首頁', href: '/' },
   { label: '分析', href: '/analyze' },
   { label: '零股情報', href: '/odd-lot' },
+  { label: '個人損益', href: '/portfolio' },
 ]
 
 export interface HeaderUser {
