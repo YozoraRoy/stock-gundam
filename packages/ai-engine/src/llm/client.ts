@@ -4,6 +4,8 @@ export interface LLMConfig {
   apiKey?: string
   baseUrl?: string
   temperature?: number
+  /** 覆寫全域 LLM_MAX_TOKENS 的輸出 token 上限（例如辨識只輸出小 JSON 時壓低以避開 TPM）。 */
+  maxTokens?: number
 }
 
 export interface LLMUsage {

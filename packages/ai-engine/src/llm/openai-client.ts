@@ -58,7 +58,7 @@ export class OpenAICompatibleClient implements LLMClient {
   private async callAPI(messages: { role: string; content: string | ContentPart[] }[]): Promise<string> {
     const maxRetries = 3
     const timeoutMs = Number(process.env.LLM_TIMEOUT_MS) || 180_000
-    const maxTokens = Number(process.env.LLM_MAX_TOKENS) || 8192
+    const maxTokens = this.config.maxTokens ?? (Number(process.env.LLM_MAX_TOKENS) || 8192)
     const disableThinking = (process.env.LLM_DISABLE_THINKING ?? 'true').toLowerCase() !== 'false'
 
     let lastError: any = null

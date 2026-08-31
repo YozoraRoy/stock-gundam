@@ -3,17 +3,24 @@ import { LLMFactory } from './factory.js'
 import { FallbackClient } from './fallback-client.js'
 import type { LLMClient } from './client.js'
 
+export interface QuickLLMOptions {
+  /** 覆寫輸出 token 上限（避免 Groq 等低 TPM fallback 因 max_tokens 預算太大直接 413）。 */
+  maxTokens?: number
+}
+
 /**
  * Build a "quick" LLM client with an optional fallback chain (shared by
  * portfolio analysis and image recognition). Uses QUICK group models.
  */
-export function createQuickLLM(config: AppConfig): { llm: LLMClient; fallbackModel: string | null } {
-  let llm = LLMFactory.create({
+export function createQuickLLM(config: AppConfig, opts?: QuickLLMOptions): { llm: LLMClient; primary: LLMClient; fallbackModel: string | null } {
+  const primary = LLMFactory.create({
     provider: config.llmProvider,
     model: config.quickThinkModel,
     temperature: config.temperature,
     baseUrl: config.llmProvider !== 'google' ? config.backendUrl : undefined,
+    maxTokens: opts?.maxTokens,
   })
+  let llm: LLMClient = primary
 
   const fallbackProvider = process.env.FALLBACK_LLM_PROVIDER
   let fallbackModel: string | null = null
@@ -36,9 +43,10 @@ export function createQuickLLM(config: AppConfig): { llm: LLMClient; fallbackMod
       apiKey,
       baseUrl,
       temperature: config.temperature,
+      maxTokens: opts?.maxTokens,
     })
-    llm = new FallbackClient(llm, fallback)
+    llm = new FallbackClient(primary, fallback)
   }
 
-  return { llm, fallbackModel }
+  return { llm, primary, fallbackModel }
 }

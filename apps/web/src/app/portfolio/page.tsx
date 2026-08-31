@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp, Upload, Trash2, CheckCircle2 } from 'lucide-react'
+import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp, Upload, Trash2, CheckCircle2, Plus, X } from 'lucide-react'
 
 type Market = 'tw' | 'us'
 
@@ -115,6 +115,7 @@ export default function PortfolioPage() {
 
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
 
@@ -122,6 +123,7 @@ export default function PortfolioPage() {
   const [recognizing, setRecognizing] = useState(false)
   const [recognitionQuota, setRecognitionQuota] = useState<{ used: number; max: number; remaining: number } | null>(null)
   const [recognized, setRecognized] = useState<Array<RecognizedPosition & { saved?: boolean }>>([])
+  const [recognitionMethod, setRecognitionMethod] = useState<'vision' | 'ocr' | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const buildPayload = () => {
@@ -218,6 +220,7 @@ export default function PortfolioPage() {
     setError(null)
     setRecognizing(true)
     setRecognized([])
+    setRecognitionMethod(null)
     try {
       const preview = await resizeImage(file)
       setImagePreview(preview)
@@ -244,6 +247,7 @@ export default function PortfolioPage() {
         saved: false,
       }))
       setRecognized(positions)
+      setRecognitionMethod(data.method === 'ocr' ? 'ocr' : data.method === 'vision' ? 'vision' : null)
       if (data.quota) setRecognitionQuota(data.quota)
       if (positions.length === 0) setError('未辨識到任何股票，請確認圖片清楚後重試')
     } catch (e: any) {
@@ -306,12 +310,19 @@ export default function PortfolioPage() {
       const r = await saveRecognizedPosition(p, i)
       if (r) ok++
     }
-    setNotice(ok > 0 ? `已建立 ${ok} 筆持股紀錄` : null)
+    if (ok > 0) {
+      setNotice(`已建立 ${ok} 筆持股紀錄`)
+      setShowAdd(false)
+    } else {
+      setNotice(null)
+    }
   }
 
   const clearRecognition = () => {
+    if (recognizing) return
     setImagePreview(null)
     setRecognized([])
+    setRecognitionMethod(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -377,6 +388,7 @@ export default function PortfolioPage() {
       setSavedResult(data.record)
       setNotice('已儲存損益試算紀錄')
       await fetchHistory()
+      setShowAdd(false)
     } catch (e: any) {
       setError(e.message || '儲存失敗')
     } finally {
@@ -465,18 +477,67 @@ export default function PortfolioPage() {
   const strategyName = (id: string | null) => STRATEGIES.find(s => s.id === id)?.nameZh ?? id ?? ''
   const currency = market === 'tw' ? 'NT$' : '$'
 
+  const stats = useMemo(() => {
+    const byMarket: Record<Market, { count: number; pnl: number }> = {
+      tw: { count: 0, pnl: 0 },
+      us: { count: 0, pnl: 0 },
+    }
+    for (const r of history) {
+      const m = r.market === 'us' ? 'us' : 'tw'
+      byMarket[m].count += 1
+      byMarket[m].pnl += r.unrealized_pnl
+    }
+    return byMarket
+  }, [history])
+
   const inputCls =
     'w-full bg-[var(--bg-secondary)] border border-white/10 rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)] disabled:opacity-50'
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="flex items-center gap-3 mb-6">
-        <TrendingUp className="w-8 h-8 text-[var(--accent-green)]" />
-        <div>
-          <h1 className="text-2xl font-bold">個人損益試算</h1>
-          <p className="text-sm text-[var(--text-secondary)]">輸入持有部位，試算損益並套用投資法則取得 AI 建議</p>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3">
+          <TrendingUp className="w-8 h-8 text-[var(--accent-green)]" />
+          <div>
+            <h1 className="text-2xl font-bold">個人損益試算</h1>
+            <p className="text-sm text-[var(--text-secondary)]">{showAdd ? '輸入持有部位，試算損益並套用投資法則取得 AI 建議' : '檢視持股損益紀錄，需要新增時點選右上角「新增」'}</p>
+          </div>
         </div>
+        {!showAdd && (
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition"
+          >
+            <Plus className="w-4 h-4" />
+            新增
+          </button>
+        )}
       </div>
+
+      {error && <p className="text-xs text-red-400 mb-4">{error}</p>}
+      {notice && <p className="text-xs text-[var(--accent)] mb-4">{notice}</p>}
+
+      {showAdd && (
+        <>
+        {/* 新增持股面板 */}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <Plus className="w-4 h-4 text-[var(--accent)]" />
+              新增持股
+            </h2>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">手動輸入或使用 AI 圖片辨識建立損益紀錄</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAdd(false)}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-sm text-[var(--text-primary)] hover:bg-white/15 transition"
+          >
+            <X className="w-4 h-4" />
+            返回列表
+          </button>
+        </div>
 
       {/* AI 圖片辨識上傳 */}
       <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-6 mb-6">
@@ -493,16 +554,29 @@ export default function PortfolioPage() {
         </div>
         <p className="text-xs text-[var(--text-secondary)] mb-4">上傳券商 App 持股截圖或對帳單照片，AI 自動辨識多檔股票，逐檔建立損益紀錄。</p>
 
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} disabled={recognizing} />
         <div
-          onDragOver={e => e.preventDefault()}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className="cursor-pointer border-2 border-dashed border-white/10 hover:border-[var(--accent)] rounded-xl p-8 text-center transition group"
+          onDragOver={e => {
+            e.preventDefault()
+            if (recognizing) return
+          }}
+          onDrop={recognizing ? undefined : handleDrop}
+          onClick={() => {
+            if (recognizing) return
+            fileInputRef.current?.click()
+          }}
+          className={`rounded-xl p-8 text-center transition group ${
+            recognizing
+              ? 'cursor-wait border-2 border-dashed border-white/10 opacity-60 pointer-events-none'
+              : 'cursor-pointer border-2 border-dashed border-white/10 hover:border-[var(--accent)]'
+          }`}
         >
           <Upload className="w-10 h-10 mx-auto mb-3 text-[var(--text-secondary)] group-hover:text-[var(--accent)] transition" />
           {recognizing ? (
-            <p className="text-sm text-[var(--text-secondary)]">AI 辨識中，請稍候...</p>
+            <p className="text-sm text-[var(--text-secondary)] flex items-center justify-center gap-2">
+              <span className="inline-block w-4 h-4 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+              AI 辨識中，請稍候...
+            </p>
           ) : (
             <>
               <p className="text-sm text-[var(--text-primary)]">點擊或拖曳圖片到此處</p>
@@ -521,10 +595,14 @@ export default function PortfolioPage() {
                     ? <>辨識到 <span className="text-[var(--accent-green)]">{recognized.length}</span> 檔持股，請確認下方欄位</>
                     : '上傳成功，等待 AI 辨識...'}
                 </p>
+                {recognized.length > 0 && recognitionMethod === 'ocr' && (
+                  <p className="mt-1 text-[11px] text-amber-400">本次辨識使用 OCR 備援，數字可能誤讀，請特別檢查股數與金額。</p>
+                )}
                 <button
                   type="button"
                   onClick={clearRecognition}
-                  className="mt-2 text-xs text-[var(--text-secondary)] hover:text-red-400"
+                  disabled={recognizing}
+                  className="mt-2 text-xs text-[var(--text-secondary)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-[var(--text-secondary)]"
                 >
                   清除結果與圖片
                 </button>
@@ -756,9 +834,6 @@ export default function PortfolioPage() {
             </button>
           </div>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
-          {notice && <p className="text-xs text-[var(--accent)]">{notice}</p>}
-
           {analyzing && (
             <div className="space-y-1">
               {progress.map((p, i) => (
@@ -852,15 +927,63 @@ export default function PortfolioPage() {
           )}
         </div>
       </div>
+        </>
+      )}
+
+      {/* 摘要 */}
+      {history.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+          <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-4">
+            <p className="text-xs text-[var(--text-secondary)]">持有標的</p>
+            <p className="text-xl font-bold mt-1">{history.length}</p>
+          </div>
+          <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-4">
+            <p className="text-xs text-[var(--text-secondary)]">已含 AI 建議</p>
+            <p className="text-xl font-bold mt-1">{history.filter(r => r.recommendation).length}</p>
+          </div>
+          <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-4">
+            <p className="text-xs text-[var(--text-secondary)]">台股未實現損益</p>
+            <p className={`text-lg font-bold mt-1 ${stats.tw.pnl >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>{formatMoney(stats.tw.pnl, 'tw')}</p>
+          </div>
+          <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-4">
+            <p className="text-xs text-[var(--text-secondary)]">美股未實現損益</p>
+            <p className={`text-lg font-bold mt-1 ${stats.us.pnl >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>{formatMoney(stats.us.pnl, 'us')}</p>
+          </div>
+        </div>
+      )}
 
       {/* 歷史紀錄 */}
       <div className="mt-10">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <History className="w-5 h-5 text-[var(--text-secondary)]" />
-          我的損益歷史
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <History className="w-5 h-5 text-[var(--text-secondary)]" />
+            持股損益紀錄
+          </h2>
+          {!showAdd && (
+            <button
+              type="button"
+              onClick={() => setShowAdd(true)}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-sm hover:bg-white/15 transition"
+            >
+              <Plus className="w-4 h-4" />
+              新增
+            </button>
+          )}
+        </div>
         {history.length === 0 ? (
-          <p className="text-sm text-[var(--text-secondary)]">尚無紀錄，先輸入部位並儲存或執行 AI 分析。</p>
+          <div className="bg-[var(--bg-card)] rounded-xl border border-white/5 p-8 text-center">
+            <p className="text-sm text-[var(--text-secondary)]">尚無任何損益紀錄。</p>
+            {!showAdd && (
+              <button
+                type="button"
+                onClick={() => setShowAdd(true)}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition"
+              >
+                <Plus className="w-4 h-4" />
+                新增第一筆持股
+              </button>
+            )}
+          </div>
         ) : (
           <div className="space-y-2">
             {history.map(item => {

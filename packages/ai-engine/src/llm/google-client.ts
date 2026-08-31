@@ -76,6 +76,7 @@ export class GoogleClient implements LLMClient {
         prompt: userPrompt,
         temperature: this.config.temperature,
         maxRetries: 0,
+        ...(this.config.maxTokens ? { maxOutputTokens: this.config.maxTokens } : {}),
       })
       this.reportUsage(usage)
       this.onCall?.({ model: this.config.model, usedFallback: false })
@@ -100,6 +101,7 @@ export class GoogleClient implements LLMClient {
         ],
         temperature: this.config.temperature,
         maxRetries: 0,
+        ...(this.config.maxTokens ? { maxOutputTokens: this.config.maxTokens } : {}),
       })
       this.reportUsage(usage)
       this.onCall?.({ model: this.config.model, usedFallback: false })
@@ -117,6 +119,7 @@ export class GoogleClient implements LLMClient {
         schema,
         temperature: this.config.temperature,
         maxRetries: 0,
+        ...(this.config.maxTokens ? { maxOutputTokens: this.config.maxTokens } : {}),
       })
       this.reportUsage(usage)
       this.onCall?.({ model: this.config.model, usedFallback: false })
