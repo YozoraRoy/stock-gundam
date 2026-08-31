@@ -6,6 +6,7 @@ export {
   getHistoricalGifts, ensureSeedData,
   getUserById, getUserIdentities, findOrCreateUser, getUsageCount, consumeAnalysisQuota,
   getRecognitionUsage, consumeRecognitionQuota, refundRecognitionQuota,
+  searchStocksByName,
   deleteAnalysisRecord,
 } from './db.js'
 export type { AnalysisRecord, PortfolioRecord, PortfolioRecordInput, HistoricalGift, UserRow, UserIdentityRow, AuthProvider, IdentityInput, QuotaResult } from './db.js'

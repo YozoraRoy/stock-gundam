@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { recognizePortfolioImage } from '@stock/ai-engine'
 import { consumeRecognitionQuota, getRecognitionUsage, refundRecognitionQuota } from '@stock/database'
+import { enrichRecognizedPositions } from '../../../../lib/portfolio'
 import { DAILY_RECOGNITION_LIMIT, getCurrentUserFromCookies, getTaiwanDateStr } from '../../../../lib/auth'
 
 export const runtime = 'nodejs'
@@ -84,10 +85,24 @@ export async function POST(req: Request) {
       await refundRecognitionQuota(user.id, getTaiwanDateStr())
     }
 
+    // 自動補齊：用 Yahoo 搜尋/報價把空缺欄位（代號/名稱/現價）填好。
+    // 補齊是 best-effort，失敗保留原值，不影響辨識與額度結果。
+    let positions = result.positions
+    const enriched = { names: 0, symbols: 0, prices: 0 }
+    if (result.positions.length > 0) {
+      const e = await enrichRecognizedPositions(result.positions)
+      positions = e.positions
+      enriched.names = e.enriched.names
+      enriched.symbols = e.enriched.symbols
+      enriched.prices = e.enriched.prices
+    }
+
     const used = await getRecognitionUsage(user.id, getTaiwanDateStr())
     return NextResponse.json({
       success: true,
       ...result,
+      positions,
+      enriched,
       quota: {
         used,
         max: DAILY_RECOGNITION_LIMIT,

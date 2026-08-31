@@ -1540,6 +1540,34 @@ export async function refundRecognitionQuota(userId: number, date: string): Prom
 }
 
 /**
+ * 依中文（或部分）股票名稱查詢候選代號；TWSE 零股交易表優先（涵蓋上市上櫃/ETF），
+ * 找不到再於股東會紀念品表找。同時支援本機 SQLite 與線上 AzureSQL。
+ * 回傳一組 { stock_id, stock_name }（stock_id 依市場為純數字代號，如 "2330"、"0050"）。
+ */
+export async function searchStocksByName(keyword: string): Promise<Array<{ stock_id: string; stock_name: string }>> {
+  const trimmed = keyword.trim()
+  if (!trimmed) return []
+  const kw = `%${trimmed}%`
+  const rows = await dbQueryAll(
+    `SELECT stock_id, stock_name FROM odd_lot_trades
+     WHERE stock_name LIKE @kw
+     GROUP BY stock_id, stock_name
+     ORDER BY CASE WHEN stock_name = @exact THEN 0 ELSE 1 END, stock_id
+     LIMIT 15`,
+    { kw, exact: trimmed },
+  )
+  if (rows.length) return rows as Array<{ stock_id: string; stock_name: string }>
+  const gifts = await dbQueryAll(
+    `SELECT DISTINCT stock_id, stock_name FROM shareholder_gifts
+     WHERE stock_name LIKE @kw
+     ORDER BY stock_id
+     LIMIT 15`,
+    { kw },
+  )
+  return gifts as Array<{ stock_id: string; stock_name: string }>
+}
+
+/**
  * Atomically consume one image-recognition quota for the given user/date.
  * Separate from `consumeAnalysisQuota` (uses its own table/limit).
  */

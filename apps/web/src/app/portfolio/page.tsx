@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp, Upload, Trash2, CheckCircle2, Plus, X } from 'lucide-react'
+import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp, Upload, Trash2, CheckCircle2, Plus, X, Search } from 'lucide-react'
 
 type Market = 'tw' | 'us'
 
@@ -124,6 +124,10 @@ export default function PortfolioPage() {
   const [recognitionQuota, setRecognitionQuota] = useState<{ used: number; max: number; remaining: number } | null>(null)
   const [recognized, setRecognized] = useState<Array<RecognizedPosition & { saved?: boolean }>>([])
   const [recognitionMethod, setRecognitionMethod] = useState<'vision' | 'ocr' | null>(null)
+  const [enrichState, setEnrichState] = useState<{ names: number; symbols: number; prices: number } | null>(null)
+  const [searchFor, setSearchFor] = useState<number | null>(null)
+  const [searchResults, setSearchResults] = useState<Array<{ symbol: string; name: string }>>([])
+  const [searchLoading, setSearchLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const buildPayload = () => {
@@ -221,6 +225,9 @@ export default function PortfolioPage() {
     setRecognizing(true)
     setRecognized([])
     setRecognitionMethod(null)
+    setEnrichState(null)
+    setSearchFor(null)
+    setSearchResults([])
     try {
       const preview = await resizeImage(file)
       setImagePreview(preview)
@@ -248,6 +255,7 @@ export default function PortfolioPage() {
       }))
       setRecognized(positions)
       setRecognitionMethod(data.method === 'ocr' ? 'ocr' : data.method === 'vision' ? 'vision' : null)
+      if (data.enriched) setEnrichState(data.enriched)
       if (data.quota) setRecognitionQuota(data.quota)
       if (positions.length === 0) setError('未辨識到任何股票，請確認圖片清楚後重試')
     } catch (e: any) {
@@ -271,6 +279,54 @@ export default function PortfolioPage() {
 
   const updateRecognized = (index: number, patch: Partial<RecognizedPosition> & { saved?: boolean }) => {
     setRecognized((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch, saved: false } : p)))
+  }
+
+  /** 依代號或名稱搜尋股票，列出候選清單讓使用者挑正確的補齊欄位。 */
+  const handleSearchStock = async (i: number) => {
+    const p = recognized[i]
+    const q = (p.symbolName || p.symbol || '').trim()
+    if (!q) {
+      setError('請先填名稱或代號再搜尋')
+      return
+    }
+    setError(null)
+    setSearchLoading(true)
+    try {
+      const res = await fetch('/api/portfolio/recognize/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q, market: p.market }),
+      })
+      const data = await res.json()
+      const results: Array<{ symbol: string; name: string }> = (data.results ?? [])
+        .map((r: any) => ({ symbol: r.symbol, name: r.name }))
+        .filter((r: any) => r.symbol && r.name)
+      setSearchResults(results)
+      setSearchFor(i)
+    } catch {
+      setError('搜尋失敗，請稍後再試')
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  const handlePickStock = async (i: number, r: { symbol: string; name: string }) => {
+    setSearchFor(null)
+    const p = recognized[i]
+    updateRecognized(i, { symbol: r.symbol.toUpperCase(), symbolName: r.name || undefined })
+    setNotice(`已填入 ${r.symbol}，正在抓取現價...`)
+    try {
+      const res = await fetch(`/api/portfolio/quote?symbol=${encodeURIComponent(r.symbol)}&market=${p.market}`)
+      const data = await res.json()
+      if (res.ok && typeof data.price === 'number') {
+        updateRecognized(i, { currentPrice: data.price, symbolName: data.name || r.name || undefined })
+        setNotice(`已填入 ${data.symbol}（${data.name || r.name}）現價 ${data.price}`)
+      } else {
+        setNotice(`已填入 ${r.symbol}，現價請手動輸入`)
+      }
+    } catch {
+      setNotice(`已填入 ${r.symbol}，現價請手動輸入`)
+    }
   }
 
   const saveRecognizedPosition = async (p: RecognizedPosition & { saved?: boolean }, index: number) => {
@@ -323,6 +379,9 @@ export default function PortfolioPage() {
     setImagePreview(null)
     setRecognized([])
     setRecognitionMethod(null)
+    setEnrichState(null)
+    setSearchFor(null)
+    setSearchResults([])
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -611,6 +670,12 @@ export default function PortfolioPage() {
 
             {recognized.length > 0 && (
               <div className="space-y-3">
+                {enrichState && (enrichState.symbols + enrichState.names + enrichState.prices) > 0 && (
+                  <p className="text-[11px] text-[var(--accent)]">
+                    已自動補齊：代號 {enrichState.symbols} 檔、名稱 {enrichState.names} 檔、現價 {enrichState.prices} 檔（仍可手動修正，或點選右側
+                    <Search className="w-3 h-3 inline" /> 重新搜尋）
+                  </p>
+                )}
                 <div className="overflow-x-auto rounded-xl border border-white/10">
                   <table className="w-full text-xs min-w-[720px]">
                     <thead>
@@ -629,6 +694,7 @@ export default function PortfolioPage() {
                     </thead>
                     <tbody>
                       {recognized.map((p, i) => (
+                        <>
                         <tr key={i} className={`border-b border-white/5 ${p.saved ? 'opacity-60' : ''}`}>
                           <td className="px-2 py-2 text-[var(--text-secondary)]">{i + 1}</td>
                           <td className="px-2 py-2">
@@ -695,6 +761,14 @@ export default function PortfolioPage() {
                           </td>
                           <td className="px-2 py-2">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSearchStock(i)}
+                                className="text-[var(--text-secondary)] hover:text-[var(--accent)]"
+                                title="搜尋股票補齊代號/名稱/現價"
+                              >
+                                <Search className="w-3.5 h-3.5" />
+                              </button>
                               {p.saved ? (
                                 <button
                                   type="button"
@@ -727,6 +801,54 @@ export default function PortfolioPage() {
                             </div>
                           </td>
                         </tr>
+                        {searchFor === i && (
+                          <tr className="bg-[var(--bg-secondary)]/60 border-b border-white/5">
+                            <td colSpan={10} className="px-2 py-2">
+                              {(searchLoading || searchResults.length === 0) && (
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs text-[var(--text-secondary)]">
+                                    {searchLoading ? '搜尋中...' : '查無結果，可直接手動輸入代號/名稱。'}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSearchFor(null)}
+                                    className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                  >
+                                    <X className="w-3.5 h-3.5 inline" /> 關閉
+                                  </button>
+                                </div>
+                              )}
+                              {!searchLoading && searchResults.length > 0 && (
+                                <div>
+                                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                                    <p className="text-xs text-[var(--text-secondary)]">選取正確的股票（點選後自動填入代號/名稱並抓取現價）</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSearchFor(null)}
+                                      className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                    >
+                                      <X className="w-3.5 h-3.5 inline" /> 取消
+                                    </button>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {searchResults.map((r, j) => (
+                                      <button
+                                        key={j}
+                                        type="button"
+                                        onClick={() => handlePickStock(i, r)}
+                                        className="px-2.5 py-1 rounded-lg bg-[var(--bg-secondary)] border border-white/10 text-xs hover:border-[var(--accent)] transition text-left"
+                                      >
+                                        <span className="font-mono text-[var(--accent)]">{r.symbol}</span>
+                                        <span className="text-[var(--text-primary)] ml-1.5">{r.name}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                        </>
                       ))}
                     </tbody>
                   </table>

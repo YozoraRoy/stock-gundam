@@ -1,4 +1,17 @@
 import { yahooFinanceProvider } from '@stock/market-data'
+import { searchStocksByName } from '@stock/database'
+import { Converter } from 'opencc-js'
+
+// 簡→繁轉換：OCR 常把繁體讀成簡體（chi_sim），DB（TWSE）名稱是繁體。
+// opencc cn→t 會多做區域偏好（臺/羣），TWSE 慣用「台/群」，故再 de-regional 回去。
+const ocC2T = Converter({ from: 'cn', to: 't' })
+export function toTraditionalZh(text: string): string {
+  try {
+    return ocC2T(text).replace(/臺/g, '台').replace(/羣/g, '群')
+  } catch {
+    return text
+  }
+}
 
 export type Market = 'tw' | 'us'
 
@@ -110,6 +123,154 @@ export async function fetchLiveQuote(rawSymbol: string, market: Market): Promise
     console.error('[Portfolio] fetchLiveQuote failed:', e)
     return null
   }
+}
+
+/**
+ * 清掉 OCR 誤讀造成的名稱前導雜訊（如 "2星宇航空" → "星宇航空"）。
+ * 只在中文字存在時才清理（避免誤傷合法的英文數字名，如 "2U, Inc."）。
+ */
+export function cleanOcrName(raw: string): string {
+  const t = (raw ?? '').trim()
+  if (/[\u4e00-\u9fa5]/.test(t)) return t.replace(/^[^\u4e00-\u9fa5A-Za-z]+/u, '')
+  return t
+}
+
+/** Yahoo 搜尋代號正規化：台股 "2646.TW" → "2646"（App 內以純數字存台股代號），美股保留原案。 */
+function normalizeSearchSymbol(symbol: string): string {
+  return symbol.toUpperCase().replace(/\.(TW|TWO)$/i, '')
+}
+
+export interface StockCandidate {
+  symbol: string
+  name: string
+  market: Market
+}
+
+/**
+ * 依名稱或代號搜尋股票候選清單（供自動補齊與前端手動搜尋共用）。
+ * - 台股：以本地 DB（TWSE 零股交易/股東會紀念品）的中文名稱查詢為主，
+ *   Yahoo 對中文名稱搜尋極不可靠（實測 "星宇航空" 回空）；DB 沒有結果才 fallback 到 Yahoo。
+ * - 美股：Yahoo searchSymbols。
+ */
+export async function searchStockCandidates(q: string, market: Market): Promise<StockCandidate[]> {
+  const query = q.trim()
+  if (!query) return []
+  try {
+    if (market === 'tw') {
+      const db = await searchStocksByName(toTraditionalZh(query))
+      if (db.length) return db.map(r => ({ symbol: normalizeSearchSymbol(r.stock_id), name: r.stock_name, market: 'tw' as Market }))
+      const y = await yahooFinanceProvider.searchSymbols(query)
+      const tw = y.filter(r => /\.(TW|TWO)$/i.test(r.symbol))
+      if (tw.length) return tw.map(r => ({ symbol: normalizeSearchSymbol(r.symbol), name: r.name, market: 'tw' as Market }))
+      return []
+    }
+    const y = await yahooFinanceProvider.searchSymbols(query)
+    return y.map(r => ({ symbol: r.symbol, name: r.name, market: 'us' as Market })).slice(0, 10)
+  } catch {
+    return []
+  }
+}
+
+/** 依名稱搜尋 Yahoo 股票代號（回傳最相關一筆，供自動補齊）。 */
+async function findSymbolByName(name: string, market: Market): Promise<{ symbol: string; name: string } | null> {
+  const candidates = await searchStockCandidates(name, market)
+  if (!candidates.length) return null
+  return { symbol: candidates[0].symbol, name: candidates[0].name }
+}
+
+/** 可供補齊的辨識部位（欄位皆可缺，補齊後仍回傳同一型別）。 */
+export interface EnrichablePosition {
+  market: Market
+  symbol: string
+  symbolName?: string
+  shares: number
+  cost: number
+  currentPrice?: number
+  dividend: number
+}
+
+export interface EnrichmentSummary {
+  names: number
+  symbols: number
+  prices: number
+}
+
+/**
+ * 辨識結果自動補齊：用 Yahoo 搜尋/報價把空缺欄位填好。
+ * - symbol 空缺但有名稱 → searchSymbols 依名稱找代號
+ * - symbolName 空缺但有代號 → getProfile 取名稱
+ * - currentPrice 缺漏 → fetchLiveQuote 抓即時報價
+ * 全程 best-effort：任何一步失敗都保留原值，不影響辨識主流程。
+ */
+export async function enrichRecognizedPositions<P extends EnrichablePosition>(
+  positions: P[],
+): Promise<{ positions: P[]; enriched: EnrichmentSummary }> {
+  const enriched: EnrichmentSummary = { names: 0, symbols: 0, prices: 0 }
+  const out = await Promise.all(
+    positions.map(async (p) => {
+      const next: EnrichablePosition = { ...p }
+
+      const cleanName = p.symbolName ? cleanOcrName(p.symbolName) : ''
+      if (cleanName && cleanName !== p.symbolName) {
+        next.symbolName = cleanName
+        enriched.names++
+      }
+
+      if (!next.symbol && cleanName) {
+        const found = await findSymbolByName(cleanName, p.market)
+        if (found) {
+          next.symbol = found.symbol
+          enriched.symbols++
+          // DB/TWSE 名稱比 OCR 讀出更可靠；簡繁等效時以正名取代。
+          if (p.market === 'tw' && found.name && toTraditionalZh(found.name) === toTraditionalZh(cleanName)) {
+            next.symbolName = found.name
+            enriched.names++
+          } else if (!next.symbolName) {
+            next.symbolName = found.name
+          }
+        }
+      }
+
+      // 台股代號若含英文字母（如 OCR 誤讀 "IR0230"）視為雜訊，改用名稱重新解析。
+      const badTwSymbol = p.market === 'tw' && !!next.symbol && !/^\d{4,6}$/.test(next.symbol)
+      if ((!next.symbol || badTwSymbol) && cleanName) {
+        const found = await findSymbolByName(cleanName, p.market)
+        if (found) {
+          next.symbol = found.symbol
+          enriched.symbols++
+          if (p.market === 'tw' && found.name && toTraditionalZh(found.name) === toTraditionalZh(cleanName)) {
+            next.symbolName = found.name
+            enriched.names++
+          } else if (!next.symbolName) {
+            next.symbolName = found.name
+          }
+        }
+      }
+
+      if (next.symbol && !next.symbolName) {
+        try {
+          const yahooSymbol = await resolveYahooSymbol(next.symbol, p.market)
+          const profile = await yahooFinanceProvider.getProfile(yahooSymbol, p.market === 'tw' ? 'TW' : 'US')
+          // Yahoo 的台股 profile 常回傳代號本身（如 "2646.TW"）而非中文名，不算有效名稱。
+          if (profile.name && profile.name.trim().toUpperCase() !== yahooSymbol.trim().toUpperCase()) {
+            next.symbolName = profile.name
+            enriched.names++
+          }
+        } catch {}
+      }
+
+      if (next.symbol && (next.currentPrice == null || next.currentPrice <= 0)) {
+        const q = await fetchLiveQuote(next.symbol, p.market)
+        if (q && q.price > 0) {
+          next.currentPrice = q.price
+          enriched.prices++
+        }
+      }
+
+      return next
+    }),
+  )
+  return { positions: out as P[], enriched }
 }
 
 /** 給 AI 用的市場上下文簡述。 */
