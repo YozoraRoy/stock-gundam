@@ -12,6 +12,11 @@ export class FallbackClient implements LLMClient {
     private fallback: LLMClient,
   ) {}
 
+  /** 內層 fallback client：当主要模型已確定不可用（如配額被鎖）時可直接呼叫，省去每輪重試 primary。 */
+  get secondary(): LLMClient {
+    return this.fallback
+  }
+
   get model(): string {
     return this.lastModel || this.primary.model
   }

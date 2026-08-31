@@ -326,6 +326,15 @@ async function getAzurePool(): Promise<sql.ConnectionPool | null> {
           CONSTRAINT uq_api_usage UNIQUE (user_id, usage_date)
         );
         CREATE INDEX idx_api_usage_user ON api_usage(user_id);
+      END
+    `)
+
+    // 即使 users 已存在，也要確保後續加入的表有建立：
+    // 若是把這些 CREATE 包在「users 不存在才建」的守衛內，已上線的 DB 會永遠漏建，
+    // 造成 consumeRecognitionQuota / 存持股永遠失敗。改用 per-table 獨立守衛。
+    await _pool.request().query(`
+      IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'recognition_usage')
+      BEGIN
         CREATE TABLE recognition_usage (
           id         INT IDENTITY(1,1) PRIMARY KEY,
           user_id    INT NOT NULL,
@@ -334,6 +343,12 @@ async function getAzurePool(): Promise<sql.ConnectionPool | null> {
           CONSTRAINT uq_recognition_usage UNIQUE (user_id, usage_date)
         );
         CREATE INDEX idx_recognition_usage_user ON recognition_usage(user_id);
+      END
+    `)
+
+    await _pool.request().query(`
+      IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'portfolio_records')
+      BEGIN
         CREATE TABLE portfolio_records (
           id                   INT IDENTITY(1,1) PRIMARY KEY,
           user_id              INT NOT NULL,
@@ -1493,6 +1508,34 @@ export async function getRecognitionUsage(userId: number, date: string): Promise
   } catch (e) {
     console.error('[SQLite] getRecognitionUsage error:', e)
     return 0
+  }
+}
+
+/**
+ * 辨識失敗或結果為空（技術性失敗，非使用者責任）時補回一單位額度，
+ * 避免測試/OCR 不佳把每日額度燒光。
+ */
+export async function refundRecognitionQuota(userId: number, date: string): Promise<void> {
+  if (isAzureSql) {
+    const pool = await getAzurePool()
+    if (!pool) return
+    try {
+      await pool.request()
+        .input('uid', sql.Int, userId)
+        .input('d', sql.NVarChar(10), date)
+        .query('UPDATE recognition_usage SET count = count - 1 WHERE user_id = @uid AND usage_date = @d AND count > 0')
+    } catch (e) {
+      console.error('[AzureSQL] refundRecognitionQuota error:', e)
+    }
+    return
+  }
+
+  const db = getSqliteDb()
+  if (!db) return
+  try {
+    db.prepare('UPDATE recognition_usage SET count = count - 1 WHERE user_id = ? AND usage_date = ? AND count > 0').run(userId, date)
+  } catch (e) {
+    console.error('[SQLite] refundRecognitionQuota error:', e)
   }
 }
 

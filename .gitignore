@@ -8,6 +8,7 @@ dist/
 *.log
 .turbo/
 *.zip
+doc/
 azure_logs/
 webapp_logs/
 session-*.md

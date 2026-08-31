@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { recognizePortfolioImage } from '@stock/ai-engine'
-import { consumeRecognitionQuota, getRecognitionUsage } from '@stock/database'
+import { consumeRecognitionQuota, getRecognitionUsage, refundRecognitionQuota } from '@stock/database'
 import { DAILY_RECOGNITION_LIMIT, getCurrentUserFromCookies, getTaiwanDateStr } from '../../../../lib/auth'
 
 export const runtime = 'nodejs'
@@ -70,12 +70,29 @@ export async function POST(req: Request) {
       )
     }
 
-    const result = await recognizePortfolioImage(imageDataUrl)
+    let result
+    try {
+      result = await recognizePortfolioImage(imageDataUrl)
+    } catch (e) {
+      // 技術性失敗（LLM/OCR 錯誤）不應消耗使用者額度，補回本次扣的。
+      await refundRecognitionQuota(user.id, getTaiwanDateStr())
+      throw e
+    }
 
+    // 空結果通常是 OCR 讀不到，也視為未成功消耗額度。
+    if (result.positions.length === 0) {
+      await refundRecognitionQuota(user.id, getTaiwanDateStr())
+    }
+
+    const used = await getRecognitionUsage(user.id, getTaiwanDateStr())
     return NextResponse.json({
       success: true,
       ...result,
-      quota,
+      quota: {
+        used,
+        max: DAILY_RECOGNITION_LIMIT,
+        remaining: Math.max(0, DAILY_RECOGNITION_LIMIT - used),
+      },
     })
   } catch (e: any) {
     const status = e?.message?.includes('額度') ? 429 : 500

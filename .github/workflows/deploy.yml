@@ -53,7 +53,7 @@ jobs:
               QUICK_THINK_MODEL=big-pickle \
               FALLBACK_LLM_PROVIDER=openai \
               FALLBACK_DEEP_THINK_MODEL=qwen/qwen3.8-27b \
-              FALLBACK_QUICK_THINK_MODEL=openai/gpt-oss-120b \
+              FALLBACK_QUICK_THINK_MODEL=groq/compound-mini \
               FALLBACK_DEEP_LLM_BACKEND_URL="${{ secrets.FALLBACK_DEEP_LLM_BACKEND_URL }}" \
               FALLBACK_DEEP_LLM_API_KEY="${{ secrets.FALLBACK_DEEP_LLM_API_KEY }}" \
               FALLBACK_QUICK_LLM_BACKEND_URL="${{ secrets.FALLBACK_QUICK_LLM_BACKEND_URL }}" \

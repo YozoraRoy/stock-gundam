@@ -4,6 +4,7 @@ import Tesseract from 'tesseract.js'
 import { loadConfig } from '@stock/core'
 import { createQuickLLM } from './llm/quick.js'
 import { FallbackClient } from './llm/fallback-client.js'
+import type { LLMClient } from './llm/client.js'
 
 export interface RecognizedPosition {
   market: 'tw' | 'us'
@@ -11,7 +12,7 @@ export interface RecognizedPosition {
   symbolName?: string
   shares: number
   cost: number
-  currentPrice: number
+  currentPrice?: number
   dividend: number
 }
 
@@ -23,13 +24,17 @@ export interface RecognizePortfolioImageResult {
   method: 'vision' | 'ocr'
 }
 
+// 辨識輸出採「盡量寬鬆」：不同券商 App 截圖欄位差異大（有的根本沒有股號/成本/現價），
+// 缺漏的由使用者在前端的可編輯確認表格補齊後再存。只強制 market 與 shares。
 const RecognizedPositionSchema = z.object({
   market: z.enum(['tw', 'us']),
-  symbol: z.string().min(1),
+  // symbol 允許空白：部分券商庫存表根本沒有股號欄位，硬逼會讓 LLM 杜撰錯誤代號，
+  // 交由使用者在前端確認表格補齊（可編輯）較安全。
+  symbol: z.string().optional().default(''),
   symbolName: z.string().optional(),
   shares: z.number().positive(),
-  cost: z.number().nonnegative(),
-  currentPrice: z.number().positive(),
+  cost: z.number().nonnegative().optional().default(0),
+  currentPrice: z.number().positive().optional(),
   dividend: z.number().nonnegative().optional().default(0),
 })
 
@@ -41,6 +46,11 @@ const RecognizedPositionSchema = z.object({
 const IMAGE_MAX_W = Number(process.env.RECOGNIZE_IMAGE_MAX_W) || 1280
 const IMAGE_MAX_H = Number(process.env.RECOGNIZE_IMAGE_MAX_H) || 1600
 const IMAGE_JPEG_QUALITY = Number(process.env.RECOGNIZE_IMAGE_QUALITY) || 82
+// OCR 前置處理：把輸入圖放大到長邊約 2400px 再做 OCR，小螢幕截圖的字才讀得清。
+// 實測灰階 + 放大 2x + normalize + sharpen + PSM6 對券商 App 庫存表效果最佳。
+const OCR_PREPROCESS_MAX_W = Number(process.env.RECOGNIZE_OCR_MAX_W) || 2400
+const OCR_PREPROCESS_MAX_H = Number(process.env.RECOGNIZE_OCR_MAX_H) || 3000
+const OCR_PSM = process.env.RECOGNIZE_OCR_PSM || '6'
 const OCR_LANG = process.env.RECOGNIZE_OCR_LANG || 'eng+chi_sim'
 // OCR 文字送給 LLM 的上限（字元數）。Groq 等 fallback 的 TPM 上限極低（如 8000/min），
 // 若不截斷，光文字就可能觸發 Request too large / TPM 限制（API 413）。
@@ -51,10 +61,10 @@ const RECOGNIZE_MAX_ATTEMPTS = (() => {
   return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : 3
 })()
 // 輸出 token 上限：辨識只輸出小 JSON，壓低可避免 Groq 等低 TPM（8000/min）fallback
-// 因為 max_tokens 預算過大而直接 413 Request too large。
+// 因為 max_tokens 預算過大而直接 413 Request too large，或 TPM 被高 Requested 打穿。
 const RECOGNIZE_MAX_TOKENS = (() => {
   const n = Number(process.env.RECOGNIZE_MAX_TOKENS)
-  return Number.isFinite(n) && n >= 256 ? Math.round(n) : 1500
+  return Number.isFinite(n) && n >= 256 ? Math.round(n) : 900
 })()
 
 /**
@@ -87,10 +97,16 @@ async function getOcrWorker(): Promise<Tesseract.Worker> {
         if (m.status === 'recognizing text' && (m.progress === 0.5 || m.progress === 1))
           console.log(`[OCR] ${m.workerId} ${Math.round(m.progress * 100)}%`)
       },
-    }).catch((e) => {
-      ocrWorkerPromise = null
-      throw e
     })
+      .then(async (worker) => {
+        // PSM 6：假設是單一均勻區塊（表格），對券商 App 庫存截圖效果最好。
+        await worker.setParameters({ tessedit_pageseg_mode: OCR_PSM as any })
+        return worker
+      })
+      .catch((e) => {
+        ocrWorkerPromise = null
+        throw e
+      })
   }
   return ocrWorkerPromise
 }
@@ -104,8 +120,17 @@ async function ocrImage(imageDataUrl: string): Promise<string> {
   const b64 = m ? m[2] : imageDataUrl
   const buf = Buffer.from(b64, 'base64')
 
+  // 前置處理：灰階 + 放大 + 對比強化 + 銳化，小字才不會被 OCR 拆成碎片。
+  const prepared = await sharp(buf)
+    .grayscale()
+    .resize({ width: OCR_PREPROCESS_MAX_W, height: OCR_PREPROCESS_MAX_H, fit: 'inside' })
+    .normalize()
+    .sharpen()
+    .jpeg({ quality: 90 })
+    .toBuffer()
+
   const worker = await getOcrWorker()
-  const { data } = await worker.recognize(buf)
+  const { data } = await worker.recognize(prepared)
   return (data.text || '').trim()
 }
 
@@ -193,6 +218,8 @@ export async function recognizePortfolioImage(imageDataUrl: string): Promise<Rec
       return [
         '請依下方 OCR 從圖片擷取的文字辨識每一檔股票，依照規定的 JSON 格式輸出，不要有任何額外文字或 markdown。',
         'OCR 可能誤讀數字或破壞表格對齊，請依欄位語意（股號/名稱/股數/成本/現價/股息）合理判斷，不確定的欄位省略也不可亂填。',
+        '股數欄位通常是含千位分隔符的完整數字；OCR 常把 "," 誤讀成 "."（例如 "36.000" 其實是 36,000 股，請還原成 36000），不要照抄成小數。',
+        '中文 ETF/基金名稱常被拆成單字（如 "元 大 台 湾 50"），若句中明顯是「名稱 + 股數」結構，請把字組合回正確名稱，即使字元順序稍有出入也不要漏掉該檔。',
         '===== OCR 文字 =====',
         ocrText ?? '',
       ].join('\n')
@@ -223,6 +250,10 @@ export async function recognizePortfolioImage(imageDataUrl: string): Promise<Rec
 
   let lastRaw: string | null = null
   let lastIssues: string[] | null = null
+  let usedFallbackAny = false
+  // 一旦 primary（本家）連 vision 都失敗，多半是配額/額度鎖定，之後的 OCR 重試直接走 fallback，
+  // 避免每輪都先對 primary 重試 3 次浪費時間與 TPM 額度。
+  let ocrClient: LLMClient = llm
 
   for (let attempt = 0; attempt < RECOGNIZE_MAX_ATTEMPTS; attempt++) {
     let raw: string
@@ -235,12 +266,14 @@ export async function recognizePortfolioImage(imageDataUrl: string): Promise<Rec
         } catch (e: any) {
           console.warn(`[RecognizeImage] vision LLM 失敗（${e.message}），改走 OCR fallback`)
           method = 'ocr'
+          usedFallbackAny = true
+          if (llm instanceof FallbackClient) ocrClient = llm.secondary
           await getOcrText()
-          raw = await llm.generate(systemPrompt, buildUserPrompt(attempt, lastRaw, lastIssues))
+          raw = await ocrClient.generate(systemPrompt, buildUserPrompt(attempt, lastRaw, lastIssues))
         }
       } else {
         await getOcrText()
-        raw = await llm.generate(systemPrompt, buildUserPrompt(attempt, lastRaw, lastIssues))
+        raw = await ocrClient.generate(systemPrompt, buildUserPrompt(attempt, lastRaw, lastIssues))
       }
     } catch (e: any) {
       const msg = e?.message || ''
@@ -258,14 +291,21 @@ export async function recognizePortfolioImage(imageDataUrl: string): Promise<Rec
       const parsed = Array.isArray(obj) ? { positions: obj } : obj
       const result = schema.safeParse(parsed)
       if (result.success) {
-        const usedFallback = llm instanceof FallbackClient ? llm.fallbackCalls > 0 : false
+        // OCR 路徑回傳空陣列通常是「爛 OCR 讓模型放棄」而不是真的沒有股票；
+        // 若還有重試空間就多逼一次，不直接放空。
+        if (result.data.positions.length === 0 && method === 'ocr' && attempt < RECOGNIZE_MAX_ATTEMPTS - 1) {
+          lastRaw = raw
+          lastIssues = ['你回傳了空的 positions，但 OCR 文字中含有明顯的股票持有資料列（名稱 + 股數）。請再逐行解析一次，每一列都要讀成一檔股票輸出，寧可多出不確定也不可輸出空陣列。']
+          console.warn(`[RecognizeImage] 第 ${attempt + 1} 次回傳空陣列，要求重試`)
+          continue
+        }
         return {
           positions: result.data.positions,
           modelPlan: {
             primary: config.quickThinkModel,
             fallback: fallbackModel,
           },
-          usedFallback,
+          usedFallback: usedFallbackAny || (llm instanceof FallbackClient ? llm.fallbackCalls > 0 : false),
           method,
         }
       }

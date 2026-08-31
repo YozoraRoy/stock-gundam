@@ -138,7 +138,13 @@ export class OpenAICompatibleClient implements LLMClient {
         console.warn(`[OpenAIClient] Attempt ${attempt}/${maxRetries} failed: ${e.message || e}`)
 
         if (attempt < maxRetries && isRetryable) {
-          await new Promise(r => setTimeout(r, 1500 * attempt))
+          // Groq 等低 TPM 服務會回「Please try again in Xs」：等過視窗再重試，
+          // 比固定 1.5s 背退更能讓該次呼叫真正成功。
+          const tpm = e?.message?.match(/try again in ([\d.]+)s/i)
+          const tpmWaitMs = tpm ? Number(tpm[1]) * 1000 : 0
+          const waitMs = tpmWaitMs > 0 && tpmWaitMs <= 35_000 ? tpmWaitMs + 1000 : 1500 * attempt
+          console.warn(`[OpenAIClient] retrying in ${Math.round(waitMs / 1000)}s`)
+          await new Promise((r) => setTimeout(r, waitMs))
           continue
         }
         break
