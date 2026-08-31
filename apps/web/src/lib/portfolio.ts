@@ -1,5 +1,5 @@
 import { yahooFinanceProvider } from '@stock/market-data'
-import { searchStocksByName } from '@stock/database'
+import { searchStocksByName, fuzzySearchStocksByName } from '@stock/database'
 import { Converter } from 'opencc-js'
 
 // 簡→繁轉換：OCR 常把繁體讀成簡體（chi_sim），DB（TWSE）名稱是繁體。
@@ -147,6 +147,34 @@ export interface StockCandidate {
 }
 
 /**
+ * 台股名稱搜尋：DB 精準 LIKE 優先，失敗再走 fuzzy（補單字 OCR 誤讀）。
+ * fz 標記是否為模糊補救，供自動補齊判斷可否以 DB 正名取代 OCR 名稱。
+ */
+async function dbSearchTw(query: string): Promise<{ candidates: StockCandidate[]; fuzzy: boolean; ambiguous: boolean }> {
+  const conv = toTraditionalZh(query)
+  let db = await searchStocksByName(conv)
+  let fuzzy = false
+  let ambiguous = false
+  if (!db.length) {
+    const fz = await fuzzySearchStocksByName(conv)
+    if (fz.length) {
+      // 榜首與第二名距離相同（如「美債」同時貼近正2/反1）→ 無法可靠自動補齊，交給手動。
+      ambiguous = fz.length > 1 && fz[0].dist === fz[1].dist
+      if (!ambiguous) db = fz
+      fuzzy = true
+    }
+  }
+  if (db.length) {
+    return {
+      candidates: db.map(r => ({ symbol: normalizeSearchSymbol(r.stock_id), name: r.stock_name, market: 'tw' as Market })),
+      fuzzy,
+      ambiguous,
+    }
+  }
+  return { candidates: [], fuzzy, ambiguous }
+}
+
+/**
  * 依名稱或代號搜尋股票候選清單（供自動補齊與前端手動搜尋共用）。
  * - 台股：以本地 DB（TWSE 零股交易/股東會紀念品）的中文名稱查詢為主，
  *   Yahoo 對中文名稱搜尋極不可靠（實測 "星宇航空" 回空）；DB 沒有結果才 fallback 到 Yahoo。
@@ -157,8 +185,8 @@ export async function searchStockCandidates(q: string, market: Market): Promise<
   if (!query) return []
   try {
     if (market === 'tw') {
-      const db = await searchStocksByName(toTraditionalZh(query))
-      if (db.length) return db.map(r => ({ symbol: normalizeSearchSymbol(r.stock_id), name: r.stock_name, market: 'tw' as Market }))
+      const { candidates } = await dbSearchTw(query)
+      if (candidates.length) return candidates
       const y = await yahooFinanceProvider.searchSymbols(query)
       const tw = y.filter(r => /\.(TW|TWO)$/i.test(r.symbol))
       if (tw.length) return tw.map(r => ({ symbol: normalizeSearchSymbol(r.symbol), name: r.name, market: 'tw' as Market }))
@@ -172,10 +200,18 @@ export async function searchStockCandidates(q: string, market: Market): Promise<
 }
 
 /** 依名稱搜尋 Yahoo 股票代號（回傳最相關一筆，供自動補齊）。 */
-async function findSymbolByName(name: string, market: Market): Promise<{ symbol: string; name: string } | null> {
-  const candidates = await searchStockCandidates(name, market)
+async function findSymbolByName(
+  name: string,
+  market: Market,
+): Promise<{ symbol: string; name: string; fuzzy: boolean; ambiguous: boolean } | null> {
+  if (market === 'tw') {
+    const { candidates, fuzzy, ambiguous } = await dbSearchTw(name)
+    if (!candidates.length) return null
+    return { symbol: candidates[0].symbol, name: candidates[0].name, fuzzy, ambiguous }
+  }
+  const candidates = await searchStockCandidates(name, 'us')
   if (!candidates.length) return null
-  return { symbol: candidates[0].symbol, name: candidates[0].name }
+  return { symbol: candidates[0].symbol, name: candidates[0].name, fuzzy: false, ambiguous: false }
 }
 
 /** 可供補齊的辨識部位（欄位皆可缺，補齊後仍回傳同一型別）。 */
@@ -218,11 +254,11 @@ export async function enrichRecognizedPositions<P extends EnrichablePosition>(
 
       if (!next.symbol && cleanName) {
         const found = await findSymbolByName(cleanName, p.market)
-        if (found) {
+        if (found && !found.ambiguous) {
           next.symbol = found.symbol
           enriched.symbols++
-          // DB/TWSE 名稱比 OCR 讀出更可靠；簡繁等效時以正名取代。
-          if (p.market === 'tw' && found.name && toTraditionalZh(found.name) === toTraditionalZh(cleanName)) {
+          // DB/TWSE 名稱比 OCR 讀出更可靠；簡繁等效或模糊命中（單字誤讀）時以正名取代。
+          if (p.market === 'tw' && found.name && (toTraditionalZh(found.name) === toTraditionalZh(cleanName) || found.fuzzy)) {
             next.symbolName = found.name
             enriched.names++
           } else if (!next.symbolName) {
@@ -235,15 +271,19 @@ export async function enrichRecognizedPositions<P extends EnrichablePosition>(
       const badTwSymbol = p.market === 'tw' && !!next.symbol && !/^\d{4,6}$/.test(next.symbol)
       if ((!next.symbol || badTwSymbol) && cleanName) {
         const found = await findSymbolByName(cleanName, p.market)
-        if (found) {
+        if (found && !found.ambiguous) {
           next.symbol = found.symbol
           enriched.symbols++
-          if (p.market === 'tw' && found.name && toTraditionalZh(found.name) === toTraditionalZh(cleanName)) {
+          // DB/TWSE 名稱比 OCR 讀出更可靠；簡繁等效或模糊命中（單字誤讀）時以正名取代。
+          if (p.market === 'tw' && found.name && (toTraditionalZh(found.name) === toTraditionalZh(cleanName) || found.fuzzy)) {
             next.symbolName = found.name
             enriched.names++
           } else if (!next.symbolName) {
             next.symbolName = found.name
           }
+        } else if (badTwSymbol) {
+          // 誤讀代號 + 名稱也查無 → 清掉，讓使用者手動搜尋補齊（避免存下錯誤代號）。
+          next.symbol = ''
         }
       }
 

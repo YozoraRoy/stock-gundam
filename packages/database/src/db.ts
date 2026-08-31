@@ -1568,6 +1568,78 @@ export async function searchStocksByName(keyword: string): Promise<Array<{ stock
 }
 
 /**
+ * Optimal String Alignment Damerau-Levenshtein 距離（插入/刪除/取代/相鄰交換）。
+ * 供模糊比對用；兩個字串相同回 0。
+ */
+export function damerauLevenshtein(a: string, b: string): number {
+  if (a === b) return 0
+  const m = a.length
+  const n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  for (let i = 0; i <= m; i++) dp[i][0] = i
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + cost)
+      }
+    }
+  }
+  return dp[m][n]
+}
+
+/**
+ * 模糊股票名稱搜尋：依查詢前兩個中文字（發行商前綴）撈候選池，
+ * 再用 Damerau-Levenshtein 距離排序，撈回與 OCR 誤讀名稱最接近的正名。
+ * 只處理「整段名稱幾乎正確、僅單字誤讀」的典型 OCR 錯誤
+ * （如「國泰永績高股息」→「國泰永續高股息」），距離超過門檻一律丟棄。
+ */
+export async function fuzzySearchStocksByName(
+  query: string,
+  limit = 8,
+): Promise<Array<{ stock_id: string; stock_name: string; dist: number }>> {
+  const trimmed = query.trim()
+  if (!trimmed || trimmed.length < 3) return []
+  const prefix = trimmed.match(/[\u4e00-\u9fff]{2}/)?.[0] ?? ''
+  if (!prefix || prefix.length < 2) return []
+
+  const pool = (await dbQueryAll(
+    `SELECT stock_id, stock_name FROM odd_lot_trades
+     WHERE stock_name LIKE @prefix
+     GROUP BY stock_id, stock_name
+     ORDER BY stock_id
+     LIMIT 80`,
+    { prefix: `${prefix}%` },
+  )) as Array<{ stock_id: string; stock_name: string }>
+
+  let poolSet = pool
+  if (pool.length < limit) {
+    const gifts = (await dbQueryAll(
+      `SELECT DISTINCT stock_id, stock_name FROM shareholder_gifts
+       WHERE stock_name LIKE @prefix
+       ORDER BY stock_id
+       LIMIT 80`,
+      { prefix: `${prefix}%` },
+    )) as Array<{ stock_id: string; stock_name: string }>
+    if (gifts.length) {
+      const seen = new Set(pool.map(r => r.stock_id))
+      poolSet = [...pool, ...gifts.filter(r => !seen.has(r.stock_id))]
+    }
+  }
+
+  if (!poolSet.length) return []
+  const threshold = Math.max(3, Math.ceil(trimmed.length / 2))
+  const scored = poolSet
+    .map(r => ({ ...r, dist: damerauLevenshtein(r.stock_name, trimmed) }))
+    .filter(r => r.dist <= threshold)
+    .sort((x, y) => x.dist - y.dist || x.stock_id.localeCompare(y.stock_id))
+    .slice(0, limit)
+  return scored
+}
+
+/**
  * Atomically consume one image-recognition quota for the given user/date.
  * Separate from `consumeAnalysisQuota` (uses its own table/limit).
  */
