@@ -419,7 +419,9 @@ export default function BacktestPage() {
             />
           </label>
           <label className="block flex-1">
-            <span className="block text-xs text-[var(--text-secondary)] mb-1">目標獲利 %</span>
+            <span className="block text-xs text-[var(--text-secondary)] mb-1">目標獲利 %
+              <HelpCell text={'這是「鎖定獲利」目標，不是停損。買入後若價格漲到「進場價 × (1 + 8%)」（例如進場 10 萬 → 漲到約 108,000），就觸發 +8% 賣出獲利。若先跌破「進場價 × (1 − 停損%)」(預設 −5%) 則觸發停損出場；價格沒到 +8% 也沒跌破停損，則持有滿「持有天數」後出場。'} />
+            </span>
             <input
               type="number"
               min={1}
