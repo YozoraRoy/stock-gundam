@@ -56,7 +56,8 @@
 * **圖表**：股價 vs 60 日均線折線圖，紅點標示歷史進場觸發點。
 * **成交量 Top 10 快速啟動器**：開始回測按鈕旁提供「Top 10 成交量」按鈕，開啟 modal 列出 **上市** 股票成交量排行（含代號＋中文名＋成交量），可切換 **當日 / 當週 / 當月 / 當季**；點任一列即自動填入代號並開始回測。
   * 當日：單一呼叫 TWSE `STOCK_DAY_ALL`；當週/當月/當季：逐日抓取 `MI_INDEX` 歷史全市場成交股數後累加排序（並發限 6＋TTL 快取）。
-* **API**：`GET /api/backtest`（主回測）、`GET /api/backtest/live-bias`（目前乖離）、`GET /api/backtest/search`（免登入中文名搜尋）、`GET /api/backtest/top-volume?range=day|week|month|quarter`（成交量 Top 10）。
+* **功能使用事件追蹤（自建，非 GA）**：造訪 `/backtest` 會記錄 `page_view`、點擊回測會記錄 `backtest_run`（含代號）；登入時自動歸屬帳號，匿名記為 `user_id = null`。DB 失敗靜默忽略、不影響功能。
+* **API**：`GET /api/backtest`（主回測）、`GET /api/backtest/live-bias`（目前乖離）、`GET /api/backtest/search`（免登入中文名搜尋）、`GET /api/backtest/top-volume?range=day|week|month|quarter`（成交量 Top 10）、`POST /api/backtest/track`（記錄 `page_view`/`backtest_run` 事件）、`GET /api/backtest/stats`（造訪與回測啟用統計）。
 
 ### 4. 🤖 專屬 `verifier-agent` (檢查驗證 Agent)
 * **自動進程管理**：每次修改後自動檢查 Port 3000，若有舊 dev 伺服器會強制關閉並重啟乾淨的 `localhost:3000`。

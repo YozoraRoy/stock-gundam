@@ -165,6 +165,15 @@ function getSqliteDb(): Database.Database | null {
         UNIQUE(user_id, usage_date)
       );
       CREATE INDEX IF NOT EXISTS idx_recognition_usage_user ON recognition_usage(user_id);
+      CREATE TABLE IF NOT EXISTS placement_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event TEXT NOT NULL,
+        symbol TEXT,
+        user_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now', 'localtime'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_placement_event ON placement_events(event, created_at);
+      CREATE INDEX IF NOT EXISTS idx_placement_user ON placement_events(user_id);
       CREATE TABLE IF NOT EXISTS portfolio_records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
@@ -347,6 +356,21 @@ async function getAzurePool(): Promise<sql.ConnectionPool | null> {
     `)
 
     await _pool.request().query(`
+      IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'placement_events')
+      BEGIN
+        CREATE TABLE placement_events (
+          id         INT IDENTITY(1,1) PRIMARY KEY,
+          event      NVARCHAR(30) NOT NULL,
+          symbol     NVARCHAR(20),
+          user_id    INT,
+          created_at DATETIME DEFAULT GETDATE()
+        );
+        CREATE INDEX idx_placement_event ON placement_events(event, created_at);
+        CREATE INDEX idx_placement_user ON placement_events(user_id);
+      END
+    `)
+
+    await _pool.request().query(`
       IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'portfolio_records')
       BEGIN
         CREATE TABLE portfolio_records (
@@ -516,6 +540,56 @@ export async function dbExecRaw(sqlStr: string): Promise<void> {
   const db = getSqliteDb()
   if (!db) return
   db.exec(sqlStr)
+}
+
+// ─── Placement Events (page_view / backtest_run 追蹤) ────────────
+
+/**
+ * 記錄一次功能使用事件（如頁面造訪、回測啟動），可帶對應 symbol 與登入 user_id。
+ * DB 失敗一律靜默吞掉，絕不影響主功能。
+ */
+export async function logPlacementEvent(
+  event: 'page_view' | 'backtest_run',
+  opts?: { symbol?: string | null; userId?: number | null },
+): Promise<void> {
+  try {
+    await dbExecute(
+      'INSERT INTO placement_events (event, symbol, user_id) VALUES (@event, @symbol, @user_id)',
+      {
+        event,
+        symbol: opts?.symbol ?? null,
+        user_id: opts?.userId ?? null,
+      },
+    )
+  } catch (e) {
+    console.error(`[DB] logPlacementEvent failed (${event}):`, e)
+  }
+}
+
+/** 回測頁使用統計，供簡易報表/監看。 */
+export async function getPlacementEventStats(): Promise<{
+  pageViews: number
+  runCount: number
+  runBySymbol: Array<{ symbol: string | null; count: number }>
+  runByUser: Array<{ user_id: number | null; display_name: string | null; count: number }>
+}> {
+  const pageViews = (
+    await dbQueryFirst<{ c: number }>("SELECT COUNT(*) AS c FROM placement_events WHERE event = 'page_view'")
+  )?.c ?? 0
+  const runCount = (
+    await dbQueryFirst<{ c: number }>("SELECT COUNT(*) AS c FROM placement_events WHERE event = 'backtest_run'")
+  )?.c ?? 0
+  const runBySymbol = await dbQueryAll<{ symbol: string | null; count: number }>(
+    `SELECT symbol, COUNT(*) AS count FROM placement_events
+     WHERE event = 'backtest_run' GROUP BY symbol ORDER BY count DESC LIMIT 20`,
+  )
+  const runByUser = await dbQueryAll<{ user_id: number | null; display_name: string | null; count: number }>(
+    `SELECT e.user_id, u.display_name, COUNT(*) AS count
+     FROM placement_events e
+     LEFT JOIN users u ON u.id = e.user_id
+     WHERE e.event = 'backtest_run' GROUP BY e.user_id ORDER BY count DESC LIMIT 20`,
+  )
+  return { pageViews, runCount, runBySymbol, runByUser }
 }
 
 // ─── ensureSeedData (async version) ──────────────────────────────

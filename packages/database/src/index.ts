@@ -4,6 +4,7 @@ export {
   saveAnalysisRecord, getAnalysisRecords, getAnalysisRecordById,
   savePortfolioRecord, getPortfolioRecords,
   getHistoricalGifts, ensureSeedData,
+  logPlacementEvent, getPlacementEventStats,
   getUserById, getUserIdentities, findOrCreateUser, getUsageCount, consumeAnalysisQuota,
   getRecognitionUsage, consumeRecognitionQuota, refundRecognitionQuota,
   searchStocksByName, fuzzySearchStocksByName, damerauLevenshtein,

@@ -109,6 +109,20 @@ function fmtVolume(v: number): string {
   return `${Math.round(v)}`
 }
 
+/** 送出一筆功能使用事件（伺服器會依登入狀態歸屬帳號）。keepalive 避免遺失、不阻擋。 */
+function trackEvent(event: 'page_view' | 'backtest_run', symbol?: string) {
+  try {
+    fetch('/api/backtest/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event, symbol: symbol ?? null }),
+      keepalive: true,
+    }).catch(() => {})
+  } catch {
+    /* ignore */
+  }
+}
+
 function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
   if (!active) return <ArrowUpDown className="w-3.5 h-3.5 inline ml-1 text-[var(--text-secondary)] opacity-60" />
   return dir === 'asc' ? (
@@ -247,12 +261,18 @@ export default function BacktestPage() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
+  // 造訪回測頁記錄（僅 mount 一次，避免 HMR/重渲染重複計）
+  useEffect(() => {
+    trackEvent('page_view')
+  }, [])
+
   const runFromSymbol = async (sym: string) => {
     setLoading(true)
     setError(null)
     setResult(null)
     setLiveBias(null)
     setExpandedThreshold(null)
+    trackEvent('backtest_run', sym)
     try {
       const qs = new URLSearchParams({
         symbol: sym,
