@@ -1,4 +1,4 @@
-import { TrendingUp, Search, PieChart, Wallet } from 'lucide-react'
+import { TrendingUp, Search, PieChart, Wallet, Activity } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -12,7 +12,7 @@ export default function Home() {
         AI 驅動的智慧股票分析平台，整合即時市場數據與多智能體分析引擎。
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Link
           href="/analyze"
           className="bg-[var(--bg-card)] rounded-xl p-6 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left"
@@ -43,6 +43,17 @@ export default function Home() {
           <h2 className="text-lg font-semibold mb-2">個人損益試算</h2>
           <p className="text-sm text-[var(--text-secondary)]">
             輸入持有部位試算損益，套用巴菲特價值投資等法則取得 AI 買賣建議。
+          </p>
+        </Link>
+
+        <Link
+          href="/backtest"
+          className="bg-[var(--bg-card)] rounded-xl p-6 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left"
+        >
+          <Activity className="w-8 h-8 text-[var(--accent-green)] mb-4" />
+          <h2 className="text-lg font-semibold mb-2">週期進場模型預估</h2>
+          <p className="text-sm text-[var(--text-secondary)]">
+            以季線乖離率歷史回測，找出最佳進場時機與勝率。
           </p>
         </Link>
       </div>

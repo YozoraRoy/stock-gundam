@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp, Upload, Trash2, CheckCircle2, Plus, X, Search } from 'lucide-react'
 
@@ -694,8 +694,8 @@ export default function PortfolioPage() {
                     </thead>
                     <tbody>
                       {recognized.map((p, i) => (
-                        <>
-                        <tr key={i} className={`border-b border-white/5 ${p.saved ? 'opacity-60' : ''}`}>
+                        <Fragment key={i}>
+                        <tr className={`border-b border-white/5 ${p.saved ? 'opacity-60' : ''}`}>
                           <td className="px-2 py-2 text-[var(--text-secondary)]">{i + 1}</td>
                           <td className="px-2 py-2">
                             <select
@@ -848,7 +848,7 @@ export default function PortfolioPage() {
                             </td>
                           </tr>
                         )}
-                        </>
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>

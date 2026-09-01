@@ -1,6 +1,10 @@
 import type { MarketDataProvider } from '../provider.js'
 import type { OHLCV, Quote, Fundamentals, CompanyProfile } from '../types.js'
 import { MarketDataError } from '@stock/core'
+import { TTLCache } from '../cache.js'
+
+/** 歷史日線快取：盤中資料不劇烈變動，擋掉重複請求避免觸發 Yahoo Rate Limit。 */
+const historyCache = new TTLCache<OHLCV[]>(15 * 60 * 1000)
 
 interface YahooResult {
   chart?: {
@@ -66,9 +70,19 @@ export const yahooFinanceProvider: MarketDataProvider = {
   },
 
   async getHistory(symbol: string, _market: string, start?: string, end?: string): Promise<OHLCV[]> {
-    const period = start && end ? `${start}&period2=${Math.floor(new Date(end).getTime() / 1000)}` : 'max'
-    const range = start ? `period1=${Math.floor(new Date(start).getTime() / 1000)}&${period}` : 'range=1y'
-    const data: YahooResult = await yahooFetch(`/chart/${symbol}?${range}&interval=1d`)
+    const cacheKey = `${symbol}|${start ?? ''}|${end ?? ''}`
+    const cached = historyCache.get(cacheKey)
+    if (cached) return cached
+
+    // start/end 為 ISO 日期字串（YYYY-MM-DD）；未給時維持預設 range=1y。
+    let query = 'range=1y&interval=1d'
+    if (start) {
+      const p1 = Math.floor(new Date(start).getTime() / 1000)
+      const p2 = end ? Math.floor(new Date(end).getTime() / 1000) : ''
+      query = `period1=${p1}${p2 ? `&period2=${p2}` : ''}&interval=1d`
+    }
+
+    const data: YahooResult = await yahooFetch(`/chart/${symbol}?${query}`)
 
     const result = data.chart?.result?.[0]
     if (!result?.timestamp || !result.indicators?.quote?.[0]) return []
@@ -76,16 +90,26 @@ export const yahooFinanceProvider: MarketDataProvider = {
     const quote = result.indicators.quote[0]
     const adjclose = result.indicators.adjclose?.[0]?.adjclose
 
-    return result.timestamp
-      .map((ts, i) => ({
-        timestamp: ts * 1000,
-        open: quote.open?.[i] ?? 0,
-        high: quote.high?.[i] ?? 0,
-        low: quote.low?.[i] ?? 0,
-        close: adjclose?.[i] ?? quote.close?.[i] ?? 0,
-        volume: quote.volume?.[i] ?? 0,
-      }))
+    // 全域等比例還原：Ratio = AdjClose / Close，將 Open/High/Low 全乘上 Ratio，
+    // 確保回傳序列是完全還原價格（引擎只吃全還原數據）。
+    const rows: OHLCV[] = result.timestamp
+      .map((ts, i) => {
+        const rawClose = quote.close?.[i] ?? 0
+        const adj = adjclose?.[i] ?? rawClose
+        const ratio = rawClose > 0 ? adj / rawClose : 1
+        return {
+          timestamp: ts * 1000,
+          open: (quote.open?.[i] ?? 0) * ratio,
+          high: (quote.high?.[i] ?? 0) * ratio,
+          low: (quote.low?.[i] ?? 0) * ratio,
+          close: adj,
+          volume: quote.volume?.[i] ?? 0,
+        }
+      })
       .filter((v) => v.timestamp && v.close > 0)
+
+    if (rows.length > 0) historyCache.set(cacheKey, rows)
+    return rows
   },
 
   async getFundamentals(symbol: string): Promise<Fundamentals> {

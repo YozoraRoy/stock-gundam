@@ -12,6 +12,7 @@
     "build": "echo 'Bypassing Cloud Build'",
     "lint": "npm run lint --workspaces",
     "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces --if-present",
     "seed": "npm run seed --workspace=packages/database",
     "seed:odd-lot": "npm run seed:odd-lot --workspace=packages/database",
     "seed:gifts": "npm run seed:gifts --workspace=packages/database",
