@@ -88,15 +88,14 @@ export async function resolveYahooSymbol(raw: string, market: Market): Promise<s
   if (market === 'us') return trimmed
 
   if (/^\d{4,6}\.(TW|TWO)$/.test(trimmed)) return trimmed
-  if (/^\d{4,6}$/.test(trimmed)) {
-    try {
-      const q = await yahooFinanceProvider.getQuote(`${trimmed}.TW`, 'TW')
-      if (q.price > 0) return `${trimmed}.TW`
-    } catch (_) {}
-    try {
-      const q = await yahooFinanceProvider.getQuote(`${trimmed}.TWO`, 'TW')
-      if (q.price > 0) return `${trimmed}.TWO`
-    } catch (_) {}
+  // 台股代號：純數字（如 2330）或含字母的 ETF（如 00687B）
+  if (/^\d{3,6}[A-Z0-9]{0,2}$/.test(trimmed)) {
+    for (const suffix of ['.TW', '.TWO']) {
+      try {
+        const q = await yahooFinanceProvider.getQuote(`${trimmed}${suffix}`, 'TW')
+        if (q.price > 0) return `${trimmed}${suffix}`
+      } catch (_) {}
+    }
   }
   return trimmed
 }
