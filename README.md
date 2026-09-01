@@ -14,6 +14,7 @@
 | 🤖 深度 AI 分析 | `/analyze` | 8-Agent 台股/美股深度分析（每日額度） | 是 |
 | 🎁 零股情報 | `/odd-lot` | 零股行情與股東會紀念品情報 | 否 |
 | 💰 個人損益試算 | `/portfolio` | 損益試算 + AI 圖片辨識批次上傳 + AI 投資建議 + 歷史紀錄 | 是 |
+| 📉 週期進場模型回測 | `/backtest` | 台股季線乖離回測：參數可調、中文名搜尋、各閾值勝率與目前乖離狀態 | 否 |
 | 🔐 登入 | `/login` | Google / LINE OAuth 登入 | 否 |
 | 📄 隱私權政策 | `/privacy` | 隱私政策頁面 | 否 |
 | 📄 服務條款 | `/terms` | 使用條款頁面 | 否 |
@@ -45,23 +46,33 @@
   * **開盤上班日推算**：自動避開國定假日與週末休市，標明「最新開盤上班日」資訊。
   * **帶年份與跨年標示**：最後買進日格式化為 **`YYYY/MM/DD (週X)`**（例 `2026/04/22 (週三)`），若跨年自動加上 **`跨年`** 專屬標籤。
 
-### 3. 🤖 專屬 `verifier-agent` (檢查驗證 Agent)
+### 3. 📉 週期進場模型回測 (`/backtest`)
+* **台股季線乖離回測**：以 **60 日均線（季線）乖離** 為進場訊號——當收盤價低於 MA60 的乖離率 ≤ 某閾值時觸發，於次一交易日進場。演算法掃描一組乖離閾值（如 -2%、-4%、-6%…），回測每個閾值的歷史勝率、觸發次數與平均達成天數，挑出「最佳進場乖離率」。
+  * 公式：`乖離率 = (收盤價 − MA60) / MA60 × 100%`，負值越大代表跌幅越深才進場。
+* **可調整參數**：進場後 **持有天數**（預設 40）、**目標獲利 %**（預設 8%、先到先勝）、**停損 %**（預設 5%、先到先敗）、**近 X 年**（1–15 年，預設 5）歷史資料，全部可在頁面即時調整後重新回測。
+* **中文名稱搜尋＋自動補全**：輸入台股代號或中文名稱（如 `台積電`）即跳出候選清單，選取後自動回測，無需登入。
+* **各閾值表與 tooltip**：列出每個乖離閾值的交易次數、勝率、進場價區間，欄位皆有說明 tooltip（含公式）；點擊列可展開每筆交易的進場日期、進場價與結果（勝/敗/平）。
+* **目前乖離率狀態 (Live Bias)**：顯示 **昨收 vs MA60** 的目前乖離率（另抓即時報價顯示現價乖離）、最佳進場閾值對應的觸發收盤價，並標記目前乖離是否已落在進場區間、還需再跌多少才達標。
+* **圖表**：股價 vs 60 日均線折線圖，紅點標示歷史進場觸發點。
+* **API**：`GET /api/backtest`（主回測）、`GET /api/backtest/live-bias`（目前乖離）、`GET /api/backtest/search`（免登入中文名搜尋）。
+
+### 4. 🤖 專屬 `verifier-agent` (檢查驗證 Agent)
 * **自動進程管理**：每次修改後自動檢查 Port 3000，若有舊 dev 伺服器會強制關閉並重啟乾淨的 `localhost:3000`。
 * **SQL 數據與 API HTTP 三層自動化測試**：自動連線 SQLite 資料庫 (`stock.db`) 核對關鍵欄位，並實測 `GET /api/odd-lot` 與 `GET /api/gifts/history` HTTP 回應。
 
-### 4. ⚡ 股票代號智慧自動補全與 0.3 秒熔斷門禁 (Early-Exit Guard)
+### 5. ⚡ 股票代號智慧自動補全與 0.3 秒熔斷門禁 (Early-Exit Guard)
 * **台股代號智慧補全**：輸入純數字台股代號（例如 `2330` 或 `0050`），系統自動辨識並補充 `.TW`（上市）或 `.TWO`（上櫃），無需使用者手動打副檔名。
 * **無效代號 0.3 秒熔斷門禁**：在 8 個 AI 代理人啟動前進行實時數據驗證。若輸入無效代碼，系統在 **0.3 秒內立即中斷阻斷**並給予親切提示，**絕不白白浪費等待時間與 LLM API 額度**。
 
-### 5. 🔐 Google / LINE 登入與每日額度 (OAuth)
+### 6. 🔐 Google / LINE 登入與每日額度 (OAuth)
 * **Google / LINE OAuth 登入**：`/login` 頁面提供 Google 與 LINE 登入（LINE 採用 OpenID `openid profile` scope，email 為可選欄位）。
 * **每日 3 次 AI 額度**：登入後每日可進行 3 次深度分析（`consumeAnalysisQuota`，以台灣時區為準），超過即回 `429 Too Many`，額度紀錄存於 `analysis_quota` 資料表。
 
-### 6. ⏰ Azure 雙重定時自動排程機制 (WebJobs & Cron API)
+### 7. ⏰ Azure 雙重定時自動排程機制 (WebJobs & Cron API)
 * **Azure WebJobs 雲端內建排程**：台灣時間每個工作日下午 **14:30** 盤後自動啟動 TWSE 零股與 `stock.gift` 雙爬蟲與 eGift 智慧正規化，無縫更新資料庫。
 * **Cron HTTP API 端點 (`/api/cron/seed`)**：提供 API 端點支援外部 Cron 服務（如 Azure Logic Apps, GitHub Actions）隨時觸發全台爬蟲！
 
-### 🛡️ 7. 數據持久化與防洗資料保護 (Data Loss Prevention)
+### 🛡️ 8. 數據持久化與防洗資料保護 (Data Loss Prevention)
 * **資料庫路徑**：`DATABASE_PATH=/home/data/stock.db`（鎖定於 Azure NFS 持久化硬碟區）。
 * **防洗資料保護**：系統會嚴格檢查持久化資料庫，一旦檔案存在**絕對不進行任何覆蓋/重寫操作**，**100% 永久保留使用者的歷史 AI 分析紀錄與盤後資料**！
 
@@ -73,7 +84,7 @@
 stock-platform/
 ├── apps/
 │   └── web/                 # Next.js 15 Web 應用程式 (App Router)
-│       ├── src/app/         # 頁面與 API 路由 (/analyze /odd-lot /portfolio …)
+│       ├── src/app/         # 頁面與 API 路由 (/analyze /odd-lot /portfolio /backtest …)
 │       └── src/lib/         # 共享邏輯 (auth、oauth、portfolio 等)
 ├── packages/
 │   ├── ai-engine/           # AI 8-Agent 分析引擎、Symbol Guard 門禁與投資法則分析
