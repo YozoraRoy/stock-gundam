@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp, Upload, Trash2, CheckCircle2, Plus, X, Search } from 'lucide-react'
+import { searchStocks, StockCandidateList } from '@/components/stock-search'
 
 type Market = 'tw' | 'us'
 
@@ -292,15 +293,7 @@ export default function PortfolioPage() {
     setError(null)
     setSearchLoading(true)
     try {
-      const res = await fetch('/api/portfolio/recognize/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q, market: p.market }),
-      })
-      const data = await res.json()
-      const results: Array<{ symbol: string; name: string }> = (data.results ?? [])
-        .map((r: any) => ({ symbol: r.symbol, name: r.name }))
-        .filter((r: any) => r.symbol && r.name)
+      const results = await searchStocks(q, p.market)
       setSearchResults(results)
       setSearchFor(i)
     } catch {
@@ -696,7 +689,22 @@ export default function PortfolioPage() {
                       {recognized.map((p, i) => (
                         <Fragment key={i}>
                         <tr className={`border-b border-white/5 ${p.saved ? 'opacity-60' : ''}`}>
-                          <td className="px-2 py-2 text-[var(--text-secondary)]">{i + 1}</td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center gap-1 min-w-[64px]">
+                              <span className="text-[var(--text-secondary)]">{i + 1}</span>
+                              {(!p.symbol || !p.currentPrice || p.currentPrice <= 0) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSearchStock(i)}
+                                  className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 bg-[var(--bg-secondary)] text-[var(--accent)] hover:border-[var(--accent)] transition text-[10px]"
+                                  title="辨識缺代號或股價，點擊開啟候選清單同步補齊"
+                                >
+                                  <RefreshCw className="w-3 h-3" />
+                                  同步
+                                </button>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-2 py-2">
                             <select
                               value={p.market}
@@ -806,13 +814,18 @@ export default function PortfolioPage() {
                             <td colSpan={10} className="px-2 py-2">
                               {(searchLoading || searchResults.length === 0) && (
                                 <div className="flex items-center justify-between gap-2">
-                                  <p className="text-xs text-[var(--text-secondary)]">
-                                    {searchLoading ? '搜尋中...' : '查無結果，可直接手動輸入代號/名稱。'}
-                                  </p>
+                                  <StockCandidateList
+                                    candidates={searchResults}
+                                    loading={searchLoading}
+                                    onPick={() => {}}
+                                    layout="chips"
+                                    emptyText="查無結果，可直接手動輸入代號/名稱。"
+                                    className="flex-auto"
+                                  />
                                   <button
                                     type="button"
                                     onClick={() => setSearchFor(null)}
-                                    className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                    className="ml-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] shrink-0"
                                   >
                                     <X className="w-3.5 h-3.5 inline" /> 關閉
                                   </button>
@@ -830,19 +843,12 @@ export default function PortfolioPage() {
                                       <X className="w-3.5 h-3.5 inline" /> 取消
                                     </button>
                                   </div>
-                                  <div className="flex flex-wrap gap-2">
-                                    {searchResults.map((r, j) => (
-                                      <button
-                                        key={j}
-                                        type="button"
-                                        onClick={() => handlePickStock(i, r)}
-                                        className="px-2.5 py-1 rounded-lg bg-[var(--bg-secondary)] border border-white/10 text-xs hover:border-[var(--accent)] transition text-left"
-                                      >
-                                        <span className="font-mono text-[var(--accent)]">{r.symbol}</span>
-                                        <span className="text-[var(--text-primary)] ml-1.5">{r.name}</span>
-                                      </button>
-                                    ))}
-                                  </div>
+                                  <StockCandidateList
+                                    candidates={searchResults}
+                                    loading={false}
+                                    onPick={(r) => handlePickStock(i, r)}
+                                    layout="chips"
+                                  />
                                 </div>
                               )}
                             </td>

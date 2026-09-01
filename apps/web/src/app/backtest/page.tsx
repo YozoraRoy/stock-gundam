@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Activity, ListOrdered, X } from 'lucide-react'
+import { searchStocks, StockCandidateList, type StockCandidate } from '@/components/stock-search'
 
 interface SeriesPoint {
   date: number
@@ -37,11 +38,7 @@ interface ThresholdRow {
 
 type SortKey = 'threshold' | 'totalTrades' | 'winRate'
 
-interface Suggestion {
-  symbol: string
-  name: string
-  market: string
-}
+type Suggestion = StockCandidate
 
 interface BacktestResponse {
   bestThreshold: number
@@ -219,7 +216,7 @@ export default function BacktestPage() {
   const [topError, setTopError] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
 
-  // 非純數字（可能是中文名稱）時，debounce 打 /api/backtest/search 模糊搜尋台股
+  // 非純數字（可能是中文名稱）時，debounce 共用搜尋（/api/stocks/search）模糊搜尋台股
   useEffect(() => {
     const q = symbol.trim()
     const pureTwCode = /^\d{4,6}$/.test(q)
@@ -233,9 +230,8 @@ export default function BacktestPage() {
     setShowDropdown(true)
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/backtest/search?q=${encodeURIComponent(q)}`)
-        const data = await res.json()
-        setSuggestions(data.results ?? [])
+        const results = await searchStocks(q, 'tw')
+        setSuggestions(results)
       } catch {
         setSuggestions([])
       } finally {
@@ -459,25 +455,12 @@ export default function BacktestPage() {
             />
             {(showDropdown || searching) && (
               <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-lg bg-[var(--bg-card)] border border-white/10 shadow-xl overflow-hidden">
-                {searching ? (
-                  <div className="px-3 py-2.5 text-xs text-[var(--text-secondary)] flex items-center gap-2">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 搜尋中...
-                  </div>
-                ) : suggestions.length > 0 ? (
-                  suggestions.map((s, i) => (
-                    <button
-                      key={`${s.symbol}-${i}`}
-                      type="button"
-                      onClick={() => pickStock(s)}
-                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-white/5 transition flex items-center gap-2"
-                    >
-                      <span className="font-mono text-[var(--accent)] w-20 shrink-0">{s.symbol}</span>
-                      <span className="text-[var(--text-primary)] truncate">{s.name}</span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-3 py-2.5 text-xs text-[var(--text-secondary)]">查無相符股票</div>
-                )}
+                <StockCandidateList
+                  candidates={suggestions}
+                  loading={searching}
+                  onPick={pickStock}
+                  layout="stack"
+                />
               </div>
             )}
           </div>

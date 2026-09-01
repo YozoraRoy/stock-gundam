@@ -25,6 +25,7 @@
 * **5 大投資法則 (Investment Frameworks)**：套用 **巴菲特價值投資**、成長股投資、股息投資、動能投資與均衡配置等框架，交由 AI 產出 `BUY / HOLD / SELL / AVOID` 建議與理由。
 * **AI 分析 SSE 串流**：`POST /api/portfolio/analyze` 以 Server-Sent Events 回傳分析進度與結果；自動抓取公司簡介與即時報價作為市場上下文。
 * **圖片辨識 API**：`GET /api/portfolio/recognize`（查剩餘額度）/ `POST /api/portfolio/recognize`（multipart file 或 JSON base64 上傳辨識）。
+* **辨識缺漏即時同步**：若圖片辨識不出股票代號或股價，該列第一欄 `#` 會出現「同步」按鈕，點擊即開啟共用候選清單（與 `/backtest` 相同邏輯：台股 local DB 中文名＋fuzzy＋Yahoo fallback），選取後自動填入代號/名稱並抓取即時現價。
 * **個人歷史紀錄**：每次分析自動存入 `portfolio_records` 資料表，可在頁面展開歷史明細（含當時價格與 AI 建議）。
 * **共用每日額度**：AI 損益分析與 `/analyze` 共用每日 3 次額度（`consumeAnalysisQuota`）；圖片辨識另有獨立 **每日 10 次** 額度（`consumeRecognitionQuota`，存於 `recognition_usage` 資料表），避免資源被濫用。
 
@@ -57,7 +58,7 @@
 * **成交量 Top 10 快速啟動器**：開始回測按鈕旁提供「Top 10 成交量」按鈕，開啟 modal 列出 **上市** 股票成交量排行（含代號＋中文名＋成交量），可切換 **當日 / 當週 / 當月 / 當季**；點任一列即自動填入代號並開始回測。
   * 當日：單一呼叫 TWSE `STOCK_DAY_ALL`；當週/當月/當季：逐日抓取 `MI_INDEX` 歷史全市場成交股數後累加排序（並發限 6＋TTL 快取）。
 * **功能使用事件追蹤（自建，非 GA）**：造訪 `/backtest` 會記錄 `page_view`、點擊回測會記錄 `backtest_run`（含代號）；登入時自動歸屬帳號，匿名記為 `user_id = null`。DB 失敗靜默忽略、不影響功能。
-* **API**：`GET /api/backtest`（主回測）、`GET /api/backtest/live-bias`（目前乖離）、`GET /api/backtest/search`（免登入中文名搜尋）、`GET /api/backtest/top-volume?range=day|week|month|quarter`（成交量 Top 10）、`POST /api/backtest/track`（記錄 `page_view`/`backtest_run` 事件）、`GET /api/backtest/stats`（造訪與回測啟用統計）。
+* **API**：`GET /api/backtest`（主回測）、`GET /api/backtest/live-bias`（目前乖離）、`GET /api/backtest/top-volume?range=day|week|month|quarter`（成交量 Top 10）、`POST /api/backtest/track`（記錄 `page_view`/`backtest_run` 事件）、`GET /api/backtest/stats`（造訪與回測啟用統計）、`GET /api/stocks/search?q=&market=tw|us`（共用股票搜尋：回測／投資組合同步共用，台股 local DB＋fuzzy＋Yahoo fallback）。
 
 ### 4. 🤖 專屬 `verifier-agent` (檢查驗證 Agent)
 * **自動進程管理**：每次修改後自動檢查 Port 3000，若有舊 dev 伺服器會強制關閉並重啟乾淨的 `localhost:3000`。
