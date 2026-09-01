@@ -3,10 +3,8 @@ import { registry } from '@stock/market-data'
 import { runGridSearch } from '@stock/backtest'
 import { resolveYahooSymbol } from '@/lib/portfolio'
 
-/** 近 2 年圖表序列長度（約 500 個交易日）。 */
-const CHART_LOOKBACK = 500
-/** 回測資料回溯年數。 */
-const YEARS_OF_HISTORY = 10
+/** 一個交易年約多少交易日。 */
+const TRADING_DAYS_PER_YEAR = 250
 
 export const dynamic = 'force-dynamic'
 
@@ -27,13 +25,14 @@ export async function GET(req: Request) {
   const holdingDays = parseNum(searchParams.get('holdingDays'), 40, 1, 252)
   const targetPct = parseNum(searchParams.get('target'), 8, 1, 100)
   const stopPct = parseNum(searchParams.get('stop'), 5, 1, 100)
+  const years = parseNum(searchParams.get('years'), 5, 1, 15)
 
   try {
     const provider = registry.get('yahoo-finance')
     const yahooSymbol = await resolveYahooSymbol(symbol, 'tw')
     const end = new Date()
     const start = new Date(end)
-    start.setFullYear(start.getFullYear() - YEARS_OF_HISTORY)
+    start.setFullYear(start.getFullYear() - years)
 
     const history = await provider.getHistory(
       yahooSymbol,
@@ -53,12 +52,13 @@ export async function GET(req: Request) {
       },
     })
 
-    // Payload 防護：只回傳近 2 年圖表序列給前端，勝率回測仍以 10 年為準。
+    // 圖表序列長度隨所選年數調整（勝率回測亦以該年數為準）。
+    const chartLookback = years * TRADING_DAYS_PER_YEAR
     return NextResponse.json(
       {
         ...result,
-        series: result.series.slice(-CHART_LOOKBACK),
-        usage: { ...result.usage, holdingDays, targetPct, stopPct },
+        series: result.series.slice(-chartLookback),
+        usage: { ...result.usage, holdingDays, targetPct, stopPct, years },
       },
       {
         headers: { 'Cache-Control': 'no-store' },

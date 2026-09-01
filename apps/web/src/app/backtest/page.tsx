@@ -11,7 +11,7 @@ import {
   ReferenceDot,
   ResponsiveContainer,
 } from 'recharts'
-import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Activity } from 'lucide-react'
 
 interface SeriesPoint {
   date: number
@@ -57,6 +57,16 @@ interface BacktestResponse {
   usage: { startDate: number; endDate: number; dataPoints: number; entryThresholdPct: number }
 }
 
+interface LiveBias {
+  symbol: string
+  ma60: number
+  latestClose: number
+  latestBias: number | null
+  livePrice: number | null
+  livePriceBias: number | null
+  asOf: number
+}
+
 function fmtPct(v: number | null): string {
   if (v == null) return '—'
   return `${(v * 100).toFixed(1)}%`
@@ -98,11 +108,68 @@ function OutcomeBadge({ outcome }: { outcome: Trade['outcome'] }) {
   return <span className="text-[var(--text-secondary)]">平</span>
 }
 
+/** 欄位說明的「？」圖示，滑鼠懸停顯示 tooltip（可含公式）。align 控制 tooltip 相對圖示的水平對齊，靠邊欄位請用 'left' 以避免被裁切。 */
+function HelpCell({ text, align = 'center' }: { text: string; align?: 'left' | 'center' | 'right' }) {
+  const alignCls = align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'
+  return (
+    <span className="relative inline-flex items-center ml-1.5 group/help">
+      <HelpCircle className="w-3.5 h-3.5 text-[var(--text-secondary)] cursor-help" />
+      <span
+        className={`pointer-events-none absolute top-full ${alignCls} mt-1 z-30 w-64 hidden group-hover/help:block p-3 rounded-lg bg-[var(--bg-card)] border border-white/10 shadow-xl text-[11px] leading-relaxed text-[var(--text-primary)] font-normal text-left`}
+      >
+        {text}
+      </span>
+    </span>
+  )
+}
+
+/** 可排序的表格欄位標題，含排序箭頭與說明 tooltip。 */
+function HeaderCell({
+  label,
+  sortable,
+  active,
+  dir,
+  onSort,
+  help,
+  helpAlign,
+}: {
+  label: string
+  sortable?: boolean
+  active?: boolean
+  dir?: 'asc' | 'desc'
+  onSort?: () => void
+  help: string
+  helpAlign?: 'left' | 'center' | 'right'
+}) {
+  const base = 'px-4 py-2 text-left ' + (sortable ? 'cursor-pointer select-none hover:text-[var(--text-primary)]' : '')
+  return (
+    <th className={base} onClick={sortable ? onSort : undefined}>
+      <span className="inline-flex items-center">
+        {label}
+        {sortable && active !== undefined && dir && <SortIcon active={active} dir={dir} />}
+        <HelpCell text={help} align={helpAlign} />
+      </span>
+    </th>
+  )
+}
+
+const COLUMN_HELP: Record<string, string> = {
+  threshold:
+    '訊號觸發門檻（乖離率）。當收盤價低於 60 日均線的乖離率 ≤ 此閾值時，於次一交易日進場。公式：乖離率 = (收盤價 − MA60) / MA60 × 100%。負值越大代表跌幅越深才進場。',
+  totalTrades:
+    '在此乖離率閾值下，過去所選年數內實際觸發並進場的交易總數。交易採非重疊判定：進場後鎖倉至該筆結束才可再有下一筆。',
+  winRate:
+    '勝場佔已分出勝負場次的比例，平手不計入。公式：勝率 = 勝場數 / (勝場數 + 敗場數) × 100%。',
+  range:
+    '該閾值下所有交易的進場價最低至最高區間。進場價為訊號確認後次一交易日的開盤價。',
+}
+
 export default function BacktestPage() {
   const [symbol, setSymbol] = useState('')
   const [holdingDays, setHoldingDays] = useState('40')
   const [targetPct, setTargetPct] = useState('8')
   const [stopPct, setStopPct] = useState('5')
+  const [years, setYears] = useState('5')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<BacktestResponse | null>(null)
@@ -112,6 +179,7 @@ export default function BacktestPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [liveBias, setLiveBias] = useState<LiveBias | null>(null)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
 
   // 非純數字（可能是中文名稱）時，debounce 打 /api/backtest/search 模糊搜尋台股
@@ -160,6 +228,7 @@ export default function BacktestPage() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setLiveBias(null)
     setExpandedThreshold(null)
     try {
       const qs = new URLSearchParams({
@@ -167,6 +236,7 @@ export default function BacktestPage() {
         holdingDays: holdingDays || '40',
         target: targetPct || '8',
         stop: stopPct || '5',
+        years: years || '5',
       })
       const res = await fetch(`/api/backtest?${qs.toString()}`)
       const data = await res.json()
@@ -175,6 +245,10 @@ export default function BacktestPage() {
         return
       }
       setResult(data)
+      try {
+        const lb = await fetch(`/api/backtest/live-bias?symbol=${encodeURIComponent(sym)}`)
+        if (lb.ok) setLiveBias(await lb.json())
+      } catch (_) {}
     } catch {
       setError('網路錯誤，請稍後再試')
     } finally {
@@ -195,6 +269,22 @@ export default function BacktestPage() {
     close: p.close,
     ma60: p.ma60 ?? undefined,
   }))
+
+  // 目前（昨收）乖離率 vs 最佳閾值：進場須乖離 ≤ 閾值，即收盤價 ≤ MA60 × (1 + 閾值/100)。
+  const currentBias = liveBias?.latestBias ?? null
+  const bestThreshold = result?.bestThreshold ?? null
+  const targetClosePrice = bestThreshold != null && liveBias?.ma60 ? liveBias.ma60 * (1 + bestThreshold / 100) : null
+  const distanceToTargetPct =
+    currentBias != null && bestThreshold != null ? (currentBias - bestThreshold / 100) * 100 : null
+  // 目前乖離已觸發的最佳閾值（乖離 ≤ 閾值即會觸發進場）
+  const currentTriggerThreshold: number | null = (() => {
+    if (currentBias == null || !result?.bestThreshold) return null
+    if (currentBias <= result.bestThreshold / 100) return result.bestThreshold
+    // 否則找最近一個已達成的較淺閾值
+    const ts = (result.allThresholds ?? []).map((t) => t.threshold).sort((a, b) => b - a)
+    for (const t of ts) if (currentBias <= t) return t
+    return null
+  })()
 
   const sortedRows = (result?.allThresholds ? [...result.allThresholds] : [])
     .sort((a, b) => {
@@ -222,11 +312,22 @@ export default function BacktestPage() {
         <h1 className="text-2xl font-bold">週期進場模型預估</h1>
       </div>
       <p className="text-[var(--text-secondary)] mb-8">
-        台股季線乖離回測：訊號收盤確認、次一交易日進場，{holdingDays || 40} 日內先 +{targetPct || 8}% 為勝、先 −{stopPct || 5}% 為敗。
+        台股季線乖離回測：訊號收盤確認、次一交易日進場，{holdingDays || 40} 日內先 +{targetPct || 8}% 為勝、先 −{stopPct || 5}% 為敗。使用近 {years || 5} 年歷史資料。
       </p>
 
       <form onSubmit={run} className="mb-8 space-y-3 max-w-2xl">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
+          <label className="block flex-1">
+            <span className="block text-xs text-[var(--text-secondary)] mb-1">近 X 年</span>
+            <input
+              type="number"
+              min={1}
+              max={15}
+              value={years}
+              onChange={(e) => setYears(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] outline-none text-sm"
+            />
+          </label>
           <label className="block flex-1">
             <span className="block text-xs text-[var(--text-secondary)] mb-1">持有天數</span>
             <input
@@ -370,8 +471,75 @@ export default function BacktestPage() {
             </div>
           </div>
 
+          {liveBias && (
+            <div className="rounded-xl bg-[var(--bg-card)] border border-white/5 p-4">
+              <div className="flex items-center gap-2 text-[var(--text-secondary)] text-xs mb-3">
+                <Activity className="w-3.5 h-3.5 text-[var(--accent)]" />
+                目前乖離率（昨收 vs 60 日均線）· 更新 {formatDate(liveBias.asOf)}
+              </div>
+              <div className="flex flex-wrap gap-x-8 gap-y-3">
+                <div>
+                  <div className="text-xs text-[var(--text-secondary)] mb-1">
+                    目前乖離率{liveBias.livePriceBias != null && Math.abs(liveBias.livePriceBias - liveBias.latestBias!) > 0.001 ? `（昨收 ${fmtPct(liveBias.latestBias)}）` : ''}
+                  </div>
+                  <div
+                    className={`text-2xl font-bold ${
+                      currentTriggerThreshold != null
+                        ? 'text-[var(--accent-green)]'
+                        : distanceToTargetPct != null && distanceToTargetPct <= 1
+                          ? 'text-[var(--accent)]'
+                          : 'text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {liveBias.livePriceBias != null ? fmtPct(liveBias.livePriceBias) : fmtPct(liveBias.latestBias)}
+                  </div>
+                  <div className="text-xs text-[var(--text-secondary)] mt-1">
+                    MA60：{liveBias.ma60.toFixed(2)} · 昨收 {liveBias.latestClose.toFixed(2)}
+                    {liveBias.livePrice != null ? ` · 現價 ${liveBias.livePrice.toFixed(2)}` : ''}
+                  </div>
+                </div>
+
+                {bestThreshold != null && (
+                  <div className="border-l border-white/10 pl-6">
+                    <div className="text-xs text-[var(--text-secondary)] mb-1">最佳進場閾值 {fmtPct(bestThreshold / 100)}</div>
+                    {targetClosePrice != null && (
+                      <div className="text-xl font-bold text-[var(--text-primary)]">
+                        {targetClosePrice.toFixed(2)}
+                        <span className="text-xs font-normal text-[var(--text-secondary)] ml-1">（收盤價需 ≤ 此價才觸發）</span>
+                      </div>
+                    )}
+                    <div className="text-xs mt-1">
+                      {currentTriggerThreshold != null ? (
+                        <span className="text-[var(--accent-green)]">
+                          已達閾值（{fmtPct(currentTriggerThreshold / 100)}），目前在進場區
+                        </span>
+                      ) : distanceToTargetPct != null ? (
+                        <span className="text-[var(--text-secondary)]">
+                          距最佳進場還需再跌 {distanceToTargetPct.toFixed(1)}%
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl bg-[var(--bg-card)] border border-white/5 p-4">
-            <h2 className="text-sm font-medium mb-3">股價 vs 60 日均線（近 2 年）</h2>
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="text-sm font-medium">股價 vs 60 日均線（近 {years || 5} 年）</h2>
+              {currentBias != null && (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full ${
+                    currentTriggerThreshold != null
+                      ? 'bg-[var(--accent-green)]/10 text-[var(--accent-green)]'
+                      : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]'
+                  }`}
+                >
+                  目前乖離 {fmtPct(currentBias)}
+                </span>
+              )}
+            </div>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -416,36 +584,59 @@ export default function BacktestPage() {
               </ResponsiveContainer>
             </div>
             <p className="text-xs text-[var(--text-secondary)] mt-3">
-              紅點為歷史進場觸發點。圖表顯示近 2 年，勝率回測基準為近 10 年。
+              紅點為歷史進場觸發點。圖表與勝率回測基準皆為近 {years || 5} 年。
             </p>
           </div>
 
           {result.allThresholds && result.allThresholds.length > 0 && (
             <div className="rounded-xl bg-[var(--bg-card)] border border-white/5 overflow-hidden">
-              <h2 className="text-sm font-medium px-4 py-3 border-b border-white/5">各閾值回測結果</h2>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 border-b border-white/5">
+                <h2 className="text-sm font-medium">各閾值回測結果</h2>
+                {currentBias != null && (
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    目前乖離率 <span className="text-[var(--text-primary)] font-medium">{fmtPct(currentBias)}</span>
+                    {currentTriggerThreshold != null ? (
+                      <>
+                        {' '}位於閾值區間「≤ {fmtPct(currentTriggerThreshold / 100)}」內（已達進場條件）
+                      </>
+                    ) : bestThreshold != null ? (
+                      <>
+                        {' '}尚未達到任何進場閾值（最佳為 {fmtPct(bestThreshold / 100)}）
+                      </>
+                    ) : null}
+                  </span>
+                )}
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-[var(--text-secondary)] text-xs border-b border-white/5">
-                      <th className="px-4 py-2 text-left cursor-pointer select-none hover:text-[var(--text-primary)]" onClick={() => toggleSort('threshold')}>
-                        <span className="inline-flex items-center">
-                          進場乖離率
-                          <SortIcon active={sortKey === 'threshold'} dir={sortDir} />
-                        </span>
-                      </th>
-                      <th className="px-4 py-2 text-left cursor-pointer select-none hover:text-[var(--text-primary)]" onClick={() => toggleSort('totalTrades')}>
-                        <span className="inline-flex items-center">
-                          交易次數
-                          <SortIcon active={sortKey === 'totalTrades'} dir={sortDir} />
-                        </span>
-                      </th>
-                      <th className="px-4 py-2 text-left cursor-pointer select-none hover:text-[var(--text-primary)]" onClick={() => toggleSort('winRate')}>
-                        <span className="inline-flex items-center">
-                          勝率
-                          <SortIcon active={sortKey === 'winRate'} dir={sortDir} />
-                        </span>
-                      </th>
-                      <th className="px-4 py-2 text-left">進場價區間</th>
+                      <HeaderCell
+                        label="進場乖離率"
+                        sortable
+                        active={sortKey === 'threshold'}
+                        dir={sortDir}
+                        onSort={() => toggleSort('threshold')}
+                        help={COLUMN_HELP.threshold}
+                        helpAlign="left"
+                      />
+                      <HeaderCell
+                        label="交易次數"
+                        sortable
+                        active={sortKey === 'totalTrades'}
+                        dir={sortDir}
+                        onSort={() => toggleSort('totalTrades')}
+                        help={COLUMN_HELP.totalTrades}
+                      />
+                      <HeaderCell
+                        label="勝率"
+                        sortable
+                        active={sortKey === 'winRate'}
+                        dir={sortDir}
+                        onSort={() => toggleSort('winRate')}
+                        help={COLUMN_HELP.winRate}
+                      />
+                      <HeaderCell label="進場價區間" help={COLUMN_HELP.range} />
                     </tr>
                   </thead>
                   <tbody>
@@ -460,10 +651,17 @@ export default function BacktestPage() {
                             }`}
                           >
                             <td className="px-4 py-2 font-mono">
-                              {fmtPct(row.threshold / 100)}
-                              {row.threshold === result.bestThreshold && (
-                                <span className="ml-2 text-[var(--accent)] text-xs">最佳</span>
-                              )}
+                              <span className="flex items-center gap-1.5">
+                                {fmtPct(row.threshold / 100)}
+                                {row.threshold === result.bestThreshold && (
+                                  <span className="text-[var(--accent)] text-xs">最佳</span>
+                                )}
+                                {currentBias != null && currentBias <= row.threshold / 100 && (
+                                  <span className="text-[var(--accent-green)] text-[10px] bg-[var(--accent-green)]/10 px-1.5 py-0.5 rounded-full">
+                                    目前乖離已觸發
+                                  </span>
+                                )}
+                              </span>
                             </td>
                             <td className="px-4 py-2">{row.totalTrades}</td>
                             <td className="px-4 py-2">{fmtPct(row.winRate)}</td>
