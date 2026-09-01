@@ -54,7 +54,9 @@
 * **各閾值表與 tooltip**：列出每個乖離閾值的交易次數、勝率、進場價區間，欄位皆有說明 tooltip（含公式）；點擊列可展開每筆交易的進場日期、進場價與結果（勝/敗/平）。
 * **目前乖離率狀態 (Live Bias)**：顯示 **昨收 vs MA60** 的目前乖離率（另抓即時報價顯示現價乖離）、最佳進場閾值對應的觸發收盤價，並標記目前乖離是否已落在進場區間、還需再跌多少才達標。
 * **圖表**：股價 vs 60 日均線折線圖，紅點標示歷史進場觸發點。
-* **API**：`GET /api/backtest`（主回測）、`GET /api/backtest/live-bias`（目前乖離）、`GET /api/backtest/search`（免登入中文名搜尋）。
+* **成交量 Top 10 快速啟動器**：開始回測按鈕旁提供「Top 10 成交量」按鈕，開啟 modal 列出 **上市** 股票成交量排行（含代號＋中文名＋成交量），可切換 **當日 / 當週 / 當月 / 當季**；點任一列即自動填入代號並開始回測。
+  * 當日：單一呼叫 TWSE `STOCK_DAY_ALL`；當週/當月/當季：逐日抓取 `MI_INDEX` 歷史全市場成交股數後累加排序（並發限 6＋TTL 快取）。
+* **API**：`GET /api/backtest`（主回測）、`GET /api/backtest/live-bias`（目前乖離）、`GET /api/backtest/search`（免登入中文名搜尋）、`GET /api/backtest/top-volume?range=day|week|month|quarter`（成交量 Top 10）。
 
 ### 4. 🤖 專屬 `verifier-agent` (檢查驗證 Agent)
 * **自動進程管理**：每次修改後自動檢查 Port 3000，若有舊 dev 伺服器會強制關閉並重啟乾淨的 `localhost:3000`。

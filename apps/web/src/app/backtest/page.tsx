@@ -11,7 +11,7 @@ import {
   ReferenceDot,
   ResponsiveContainer,
 } from 'recharts'
-import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Activity } from 'lucide-react'
+import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Activity, ListOrdered, X } from 'lucide-react'
 
 interface SeriesPoint {
   date: number
@@ -67,6 +67,17 @@ interface LiveBias {
   asOf: number
 }
 
+interface TopVolumeItem {
+  rank: number
+  symbol: string
+  name: string
+  volume: number
+  value?: number
+  price?: number
+}
+
+type TopVolumeRange = 'day' | 'week' | 'month' | 'quarter'
+
 function fmtPct(v: number | null): string {
   if (v == null) return '—'
   return `${(v * 100).toFixed(1)}%`
@@ -89,6 +100,13 @@ function fmtPriceRange(trades: Trade[]): string {
   const max = Math.max(...prices)
   if (min === max) return min.toFixed(2)
   return `${min.toFixed(2)} ~ ${max.toFixed(2)}`
+}
+
+/** 成交量格式化：億/萬。 */
+function fmtVolume(v: number): string {
+  if (v >= 1e8) return `${(v / 1e8).toFixed(2)} 億`
+  if (v >= 1e4) return `${(v / 1e4).toFixed(1)} 萬`
+  return `${Math.round(v)}`
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
@@ -180,6 +198,11 @@ export default function BacktestPage() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [searching, setSearching] = useState(false)
   const [liveBias, setLiveBias] = useState<LiveBias | null>(null)
+  const [showTop, setShowTop] = useState(false)
+  const [topRange, setTopRange] = useState<TopVolumeRange>('day')
+  const [topList, setTopList] = useState<TopVolumeItem[]>([])
+  const [topLoading, setTopLoading] = useState(false)
+  const [topError, setTopError] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
 
   // 非純數字（可能是中文名稱）時，debounce 打 /api/backtest/search 模糊搜尋台股
@@ -261,6 +284,42 @@ export default function BacktestPage() {
     const sym = symbol.trim()
     if (!sym) return
     await runFromSymbol(sym)
+  }
+
+  // 抓取「成交量 Top 10」清單（依所選範圍）。
+  const loadTop = async (range: TopVolumeRange) => {
+    setTopRange(range)
+    setTopLoading(true)
+    setTopError(null)
+    try {
+      const res = await fetch(`/api/backtest/top-volume?range=${range}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setTopError(data.error ?? '取得排行榜失敗')
+        setTopList([])
+        return
+      }
+      setTopList(data.results ?? [])
+    } catch {
+      setTopError('網路錯誤，請稍後再試')
+      setTopList([])
+    } finally {
+      setTopLoading(false)
+    }
+  }
+
+  const openTop = () => {
+    setShowTop(true)
+    setTopList([])
+    setTopError(null)
+    void loadTop('day')
+  }
+
+  // 點選排行榜中的股票 → 填入代號、關閉 modal、自動開始回測。
+  const pickTopStock = (item: TopVolumeItem) => {
+    setSymbol(item.symbol)
+    setShowTop(false)
+    void runFromSymbol(item.symbol)
   }
 
   const triggerPoints = (result?.series ?? []).filter((p) => p.trigger)
@@ -407,6 +466,14 @@ export default function BacktestPage() {
           >
             {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
             {loading ? '回測中...' : '開始回測'}
+          </button>
+          <button
+            type="button"
+            onClick={openTop}
+            className="px-4 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 text-sm font-medium text-[var(--text-primary)] hover:bg-white/5 transition flex items-center gap-2 shrink-0"
+          >
+            <ListOrdered className="w-4 h-4 text-[var(--accent)]" />
+            Top 10 成交量
           </button>
         </div>
       </form>
@@ -729,6 +796,93 @@ export default function BacktestPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {showTop && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowTop(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-[var(--bg-card)] border border-white/10 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <ListOrdered className="w-5 h-5 text-[var(--accent)]" />
+                <h2 className="text-base font-bold">台股成交量 Top 10（上市）</h2>
+              </div>
+              <button
+                onClick={() => setShowTop(false)}
+                className="p-1.5 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]"
+                aria-label="關閉"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex gap-1.5 px-5 pt-4">
+              {(
+                [
+                  ['day', '當日'],
+                  ['week', '當週'],
+                  ['month', '當月'],
+                  ['quarter', '當季'],
+                ] as [TopVolumeRange, string][]
+              ).map(([r, label]) => (
+                <button
+                  key={r}
+                  onClick={() => void loadTop(r)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                    topRange === r
+                      ? 'bg-[var(--accent)] text-white'
+                      : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="px-5 py-4">
+              {topLoading ? (
+                <div className="py-10 text-center text-[var(--text-secondary)]">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
+                  {topRange === 'day' ? '抓取資料中...' : '累加近期成交量中，可能需要幾秒...'}
+                </div>
+              ) : topError ? (
+                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                  {topError}
+                </div>
+              ) : topList.length === 0 ? (
+                <div className="py-10 text-center text-[var(--text-secondary)] text-sm">查無資料</div>
+              ) : (
+                <div className="max-h-96 overflow-y-auto">
+                  {topList.map((item) => (
+                    <button
+                      key={item.symbol}
+                      onClick={() => pickTopStock(item)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition text-left"
+                    >
+                      <span className="w-6 shrink-0 text-center font-mono text-xs text-[var(--text-secondary)]">
+                        {item.rank}
+                      </span>
+                      <span className="font-mono text-sm text-[var(--accent)] w-16 shrink-0">{item.symbol}</span>
+                      <span className="flex-1 text-sm text-[var(--text-primary)] truncate">{item.name}</span>
+                      <span className="text-sm text-[var(--text-primary)] font-medium tabular-nums">
+                        {fmtVolume(item.volume)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 pb-4 text-xs text-[var(--text-secondary)]">
+              點擊任一股票即自動填入代號並開始回測。
+            </div>
+          </div>
         </div>
       )}
     </div>
