@@ -1,4 +1,4 @@
-import { TrendingUp, Search, PieChart, Wallet, Activity } from 'lucide-react'
+import { TrendingUp, Search, PieChart, Wallet, Activity, BarChart3, Bot } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -56,6 +56,28 @@ export default function Home() {
             以季線乖離率歷史回測，找出最佳進場時機與勝率。
           </p>
         </Link>
+
+        <div className="relative bg-[var(--bg-card)] rounded-xl p-6 border border-white/5 opacity-70 select-none">
+          <span className="absolute top-4 right-4 text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-[var(--text-secondary)]">
+            開發中
+          </span>
+          <BarChart3 className="w-8 h-8 text-[var(--accent)] mb-4" />
+          <h2 className="text-lg font-semibold mb-2">期權策略模擬</h2>
+          <p className="text-sm text-[var(--text-secondary)]">
+            設計選擇權組合策略，模擬不同市場情境下的損益與風險敞口。
+          </p>
+        </div>
+
+        <div className="relative bg-[var(--bg-card)] rounded-xl p-6 border border-white/5 opacity-70 select-none">
+          <span className="absolute top-4 right-4 text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-[var(--text-secondary)]">
+            開發中
+          </span>
+          <Bot className="w-8 h-8 text-[var(--accent-green)] mb-4" />
+          <h2 className="text-lg font-semibold mb-2">AI Agent 交易觀測</h2>
+          <p className="text-sm text-[var(--text-secondary)]">
+            即時觀察 AI Agent 的交易決策過程、持倉變動與績效回測表現。
+          </p>
+        </div>
       </div>
     </div>
   )
