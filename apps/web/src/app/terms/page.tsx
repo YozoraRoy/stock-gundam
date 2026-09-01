@@ -1,70 +1,76 @@
-import type { Metadata } from 'next'
+import Link from 'next/link'
 
-export const metadata: Metadata = {
-  title: '服務條款 | Stock Gundam',
-  description: 'Stock Gundam 服務條款',
+export const metadata = {
+  title: '服務條款 — Stock Gundam',
 }
 
 export default function TermsPage() {
   return (
-    <main className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold mb-6">服務條款</h1>
-      <p className="text-sm text-[var(--text-secondary)] mb-8">生效日期：2026 年 8 月 30 日</p>
+    <div className="max-w-3xl mx-auto px-4 py-16">
+      <h1 className="text-2xl font-bold mb-8">服務條款</h1>
+      <div className="prose prose-invert max-w-none space-y-6 text-sm text-[var(--text-secondary)] leading-relaxed">
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">一、服務說明</h2>
+          <p>
+            Stock Gundam（以下簡稱「本平台」）提供 AI 股票分析、零股行情查詢、個人損益試算與歷史回測等功能，旨在作為投資研究輔助工具。
+          </p>
+        </section>
 
-      <div className="prose prose-invert max-w-none text-sm">
-        <h2>1. 接受條款</h2>
-        <p>
-          使用 Stock Gundam（以下稱「本服務」）即表示您同意本服務條款。若您不同意，請勿使用本服務。
-        </p>
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">二、免責聲明</h2>
+          <p className="text-[var(--accent-red)]">
+            ⚠ 本平台所顯示之一切資訊、分析結果與建議，僅供參考，不構成任何投資推薦或財務建議。
+          </p>
+          <p>
+            股市投資具有風險，過去之績效不代表未來表現。您應自行判斷投資決策，本平台不對因使用本平台資訊所導致之任何損失承擔責任。
+          </p>
+        </section>
 
-        <h2>2. 服務說明</h2>
-        <p>
-          本服務為股票相關資訊的 AI 輔助分析工具，可針對您輸入的股票代號提供技術面、基本面與市場等面向的分析摘要。
-        </p>
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">三、使用者行為</h2>
+          <p>使用本平台時，您同意：</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>不以自動化方式大量抓取或複製本平台內容。</li>
+            <li>不嘗試繞過配額限制或存取控制。</li>
+            <li>不將本平台服務用於任何非法目的。</li>
+          </ul>
+        </section>
 
-        <h2>3. 非投資建議</h2>
-        <p className="font-medium text-[var(--accent-red)]">
-          本服務的分析結果僅供參考，不構成任何投資建議、要約或推薦。股市投資具有風險，
-          您應自行評估並承受所有投資決策之風險與後果，本服務不對任何投資損益負責。
-        </p>
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">四、帳號與配額</h2>
+          <p>
+            本平台提供每日免費 AI 分析額度，額度用盡後需隔日重置。本平台保留調整配額之權利，恕不另行通知。
+          </p>
+        </section>
 
-        <h2>4. AI 分析的限制</h2>
-        <ul>
-          <li>分析內容由 AI 模型產生，可能不精確或過時，請自行查證原始公開資訊。</li>
-          <li>AI 分析可能出現錯誤（hallucination），請勿僅憑分析結果進行交易。</li>
-          <li>本服務不保證分析內容的即時性、完整性或正確性。</li>
-        </ul>
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">五、智慧財產權</h2>
+          <p>
+            本平台之程式碼、介面設計與文字內容之著作權歸本平台所有。市場數據來自各證券交易所之公開資訊及第三方 API，相關商標與版權歸原權利人所有。
+          </p>
+        </section>
 
-        <h2>5. 額度與使用規範</h2>
-        <p>
-          已登入使用者每日享有有限的 AI 分析額度。我們保留調整額度、限制或停止服務之權利。
-          嚴禁以任何形式濫用本服務，包括但不限於自動化大量請求、規避額度、破壞服務等行為。
-        </p>
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">六、條款修訂</h2>
+          <p>
+            本平台保留隨時修改本服務條款之權利，修改後將於本頁發布。繼續使用本平台即視為您同意修改後之條款。
+          </p>
+        </section>
 
-        <h2>6. 帳號</h2>
-        <p>
-          您對帳號下的所有活動負責。若發現未經授權的使用，請立即通知我們。
-          我們保留在違反本條款時暫停或終止帳號之權利。
-        </p>
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">七、聯絡方式</h2>
+          <p>
+            如有疑問，請至 <a href="https://github.com/YozoraRoy/stock-gundam/issues" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">GitHub Issues</a> 提出。
+          </p>
+        </section>
 
-        <h2>7. 服務可用性</h2>
-        <p>
-          本服務可能因維護、系統故障、第三方服務（含 AI 供應商）中斷而暫時無法使用，
-          我們不保證服務不中斷或無錯誤。
-        </p>
-
-        <h2>8. 責任限制</h2>
-        <p>
-          在法律允許的最大範圍內，本服務對任何直接、間接、附帶、衍生或懲罰性損害不負責任，
-          包含因使用或無法使用本服務所生之損失。
-        </p>
-
-        <h2>9. 條款變更</h2>
-        <p>我們可能會不定期更新本條款，更新後於本頁公布。繼續使用本服務即視為接受更新後的條款。</p>
-
-        <h2>10. 準據法</h2>
-        <p>本條款以中華民國法律為準據法。</p>
+        <p className="text-[var(--text-secondary)] pt-4">最後更新：2026 年 9 月</p>
       </div>
-    </main>
+      <div className="mt-8">
+        <Link href="/" className="text-sm text-[var(--accent)] hover:underline">
+          ← 返回首頁
+        </Link>
+      </div>
+    </div>
   )
 }
