@@ -98,7 +98,9 @@ export class TradingEngine {
     this.config = loadConfig()
 
     this.analyzeMaxTokens = (() => {
-      const n = Number(process.env.ANALYZE_MAX_TOKENS || process.env.LLM_MAX_TOKENS)
+      // 只讀專屬的 ANALYZE_MAX_TOKENS，不要沿用泛用 LLM_MAX_TOKENS（通常設 8192），
+      // 否則 fallback（如 Groq）會因 max_tokens 太大而回 413 request_too_large。
+      const n = Number(process.env.ANALYZE_MAX_TOKENS)
       return Number.isFinite(n) && n >= 128 ? Math.round(n) : 2048
     })()
 
