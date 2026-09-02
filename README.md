@@ -77,8 +77,9 @@
 * **Cron HTTP API 端點 (`/api/cron/seed`)**：提供 API 端點支援外部 Cron 服務（如 Azure Logic Apps, GitHub Actions）隨時觸發全台爬蟲！
 
 ### 🛡️ 8. 數據持久化與防洗資料保護 (Data Loss Prevention)
-* **資料庫路徑**：`DATABASE_PATH=/home/data/stock.db`（鎖定於 Azure NFS 持久化硬碟區）。
-* **防洗資料保護**：系統會嚴格檢查持久化資料庫，一旦檔案存在**絕對不進行任何覆蓋/重寫操作**，**100% 永久保留使用者的歷史 AI 分析紀錄與盤後資料**！
+* **資料庫路徑**：`DATABASE_PATH=/home/data/stock.db`（鎖定於 Azure NFS 持久化硬碟區）；若設定 `DATABASE_URL` 則使用 Azure SQL Server。
+* **防洗資料保護**：系統會嚴格檢查持久化資料庫，**不會抹除整個 DB 檔／刪除歷史紀錄**——使用者的歷史 AI 分析紀錄與各交易日盤後資料**永久保留**。
+* **盤後行情逐日更新**：零股盤後價量以 TWSE 官方 TWT53U 為唯一來源，每日 WebJob／手動更新時**逐股以官方值覆寫當日資料列**（SQLite `INSERT OR REPLACE`、Azure `MERGE`），不採任何硬編碼參考價覆寫，確保與證交所一致。
 
 ---
 

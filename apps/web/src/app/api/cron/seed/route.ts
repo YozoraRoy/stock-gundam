@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server'
 import { migrate, fetchTwseOddLots, fetchStockGift } from '@stock/database'
+import { getLastMarketTradingDay, isTaiwanMarketTradingDay } from '@/utils/taiwan-calendar'
+
+function formatDateCompact(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}${m}${day}`
+}
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -13,7 +21,12 @@ export async function GET(req: Request) {
   try {
     await migrate()
     console.log('[API/Cron/Seed] Starting TWSE odd lots seed...')
-    const oddLotCount = await fetchTwseOddLots()
+    // TWT53U 無 date 參數，回傳最近一交易日盤後資料。於非交易日執行時會誤標日期，
+    // 因此一律以「最近開市日」作為該批資料的 date，確保資料與交易日一致。
+    const today = new Date()
+    const targetDate = isTaiwanMarketTradingDay(today) ? today : getLastMarketTradingDay(today)
+    const dateStr = formatDateCompact(targetDate)
+    const oddLotCount = await fetchTwseOddLots(dateStr)
 
     console.log('[API/Cron/Seed] Starting shareholder gifts seed...')
     const giftCount = await fetchStockGift()

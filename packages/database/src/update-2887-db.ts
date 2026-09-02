@@ -1,17 +1,17 @@
 import { getDb } from './db.js'
 
+// 注意：過去此腳本會把 2887 (台新金) 的價格/成交量「硬塞」成固定值 (34.15 / 19443 ...)，
+// 造成該股資料停滯在假值、與 TWSE 官方盤後行情脫節。
+// 現已改為唯讀診斷：2887 的盤後零股資料應一律來自 TWSE 官方 TWT53U 的每日抓取。
 const db = getDb()
 if (db) {
-  db.prepare(`
-    UPDATE odd_lot_trades
-    SET price = 34.15, volume = 19443, bid_price = 34.15, bid_volume = 8943, ask_price = 34.20, ask_volume = 6092
-    WHERE stock_id = '2887'
-  `).run()
-
-  db.prepare(`
-    INSERT OR REPLACE INTO shareholder_gifts (stock_id, stock_name, gift_name, last_buy_date, distribution_method)
-    VALUES ('2887', '台新新光金', '多用途矽膠隔熱餐墊(二入)', '08/14', '領取日期')
-  `).run()
-
-  console.log('[Update DB] Successfully updated stock 2887 (台新新光金) price = 34.15, volume = 19443 (Total = 66.4萬)')
+  const row = db
+    .prepare(`SELECT date, stock_id, stock_name, price, volume, bid_price, ask_price FROM odd_lot_trades WHERE stock_id = '2887' ORDER BY date DESC LIMIT 1`)
+    .get() as any
+  if (row) {
+    console.log(`[Diagnose] 2887 ${row.stock_name} 最新零股資料: date=${row.date} price=${row.price} volume=${row.volume} bid=${row.bid_price} ask=${row.ask_price}`)
+    console.log('[Diagnose] 本腳本為唯讀，未修改任何資料。如價量明顯異於 TWSE 官方盤後行情，請執行 fetchTwseOddLots 重新抓取。')
+  } else {
+    console.log('[Diagnose] 未找到 2887 資料。')
+  }
 }

@@ -14,7 +14,7 @@ interface TwseOpenApiOddLotItem {
 }
 
 export async function fetchTwseOddLots(date?: string) {
-  const targetDate = date ?? yesterday()
+  const targetDate = date ?? formatDate(new Date())
 
   // TWSE 官方 OpenAPI 盤後零股交易行情 API (TWT53U)
   const url = `https://openapi.twse.com.tw/v1/exchangeReport/TWT53U`
@@ -35,7 +35,7 @@ export async function fetchTwseOddLots(date?: string) {
 
   const db = getDb()
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO odd_lot_trades (date, stock_id, stock_name, price, volume, bid_price, bid_volume, ask_price, ask_volume)
+    INSERT OR REPLACE INTO odd_lot_trades (date, stock_id, stock_name, price, volume, bid_price, bid_volume, ask_price, ask_volume)
     VALUES (@date, @stock_id, @stock_name, @price, @volume, @bid_price, @bid_volume, @ask_price, @ask_volume)
   `)
 
@@ -71,12 +71,6 @@ function parseNum(val: string | undefined): number | null {
   const cleaned = String(val).replace(/,/g, '')
   const n = parseFloat(cleaned)
   return isNaN(n) ? null : n
-}
-
-function yesterday(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 1)
-  return formatDate(d)
 }
 
 export function formatDate(d: Date): string {

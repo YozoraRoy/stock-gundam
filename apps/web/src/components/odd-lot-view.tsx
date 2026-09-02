@@ -70,6 +70,7 @@ export function normalizePriceAndVolume(
   stockId?: string,
   currentPrice?: number | null
 ): { unitPrice: number | null; totalAmount: number | null; volume: number | null; isEstimated: boolean } {
+  // price 為 TWSE TWT53U 官方「每股成交價」直接原樣呈現，不做任何猜測/覆寫。
   if (price == null || isNaN(price) || price <= 0) {
     if (currentPrice != null && currentPrice > 0) {
       const vol = volume ?? 0
@@ -84,90 +85,12 @@ export function normalizePriceAndVolume(
   }
 
   const vol = volume ?? 0
-
-  // 特殊已知高價股名單 (股王/股后單價本來就高於 1000 元)
-  const HIGH_PRICE_STOCKS = ['3008', '5274', '6669', '3661', '3529', '6409', '2454', '2330', '2382']
-  const isHighPrice = stockId && HIGH_PRICE_STOCKS.includes(stockId)
-
-  // 1. 若單價恰好為硬編碼假數據 1000.00 或 2000.00 且非已知高價股
-  if ((price === 1000 || price === 2000) && !isHighPrice) {
-    const realUnitPrice = KNOWN_STOCK_PRICES_MAP[stockId || ''] ?? (price === 1000 ? 32.5 : 58.0)
-    return {
-      unitPrice: realUnitPrice,
-      totalAmount: vol > 0 ? (price > 10000 ? price : realUnitPrice * vol) : null,
-      volume: vol,
-      isEstimated: false,
-    }
-  }
-
-  // 2. 若單價 > 1000 且非已知股王，代表原始 price 欄位代表的是「成交總金額 TradeValue」！
-  if (price > 1000 && !isHighPrice) {
-    const effectiveVol = vol > 0 ? vol : 1000
-    const derivedPrice = Number((price / effectiveVol).toFixed(2))
-    const validUnitPrice = derivedPrice > 0 && derivedPrice < 1500 ? derivedPrice : 45.0
-    return {
-      unitPrice: validUnitPrice,
-      totalAmount: price,
-      volume: vol,
-      isEstimated: false,
-    }
-  }
-
   return {
     unitPrice: price,
     totalAmount: vol > 0 ? price * vol : null,
     volume: vol,
     isEstimated: false,
   }
-}
-
-// 權威常見台灣個股單價字典 (供單價預防矯正)
-const KNOWN_STOCK_PRICES_MAP: Record<string, number> = {
-  '1215': 92.5,  // 卜蜂
-  '1217': 11.85, // 愛之味
-  '1762': 58.2,  // 中化生
-  '2102': 18.4,  // 泰豐
-  '2241': 22.5,  // 艾姆勒
-  '2250': 95.0,  // IKKA-KY
-  '2390': 16.85, // 云辰
-  '2420': 54.0,  // 新巨
-  '2453': 62.4,  // 凌群
-  '2616': 21.5,  // 山隆
-  '2812': 18.2,  // 台中銀
-  '4142': 22.1,  // 國光生
-  '4912': 88.5,  // 聯德控股-KY
-  '5203': 115.0, // 訊連
-  '2342': 31.2,  // 茂矽
-  '1325': 38.5,  // 恆大
-  '8021': 32.4,  // 尖點
-  '9914': 195.0, // 美利達
-  '2338': 54.2,  // 光罩
-  '1513': 172.0, // 中興電
-  '3060': 24.5,  // 銘異
-  '8215': 35.8,  // 明基材
-  '3033': 38.2,  // 威健
-  '3545': 52.4,  // 敦泰
-  '3708': 105.0, // 上緯投控
-  '6215': 56.2,  // 和椿
-  '1563': 58.0,  // 巧新
-  '1609': 42.5,  // 大亞
-  '6153': 16.8,  // 嘉聯益
-  '1611': 13.5,  // 中電
-  '1733': 28.4,  // 五鼎
-  '2006': 58.6,  // 東和鋼鐵
-  '2022': 11.2,  // 聚亨
-  '2537': 14.8,  // 聯上發
-  '2614': 18.6,  // 東森
-  '3027': 34.2,  // 盛達
-  '3092': 22.4,  // 鴻碩
-  '3550': 15.2,  // 聯穎
-  '3591': 21.8,  // 艾笛森
-  '3592': 385.0, // 瑞鼎
-  '6214': 118.0, // 精誠
-  '8104': 28.5,  // 錸寶
-  '8163': 46.2,  // 達方
-  '8422': 182.0, // 可寧衛
-  '9902': 14.5,  // 台火
 }
 
 export function getSingleSharePrice(
