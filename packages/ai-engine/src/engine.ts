@@ -89,17 +89,27 @@ export class TradingEngine {
   private usageTracker = new LLMUsageTracker()
   private modelPlan: ModelPlan
   private config: AppConfig
+  /** 分析每個 Agent 呼叫的輸出 token 上限（避免請求過大的 max_tokens 觸發上游 413）。 */
+  private analyzeMaxTokens: number
 
   constructor() {
     registry.register(yahooFinanceProvider)
 
     this.config = loadConfig()
 
+    this.analyzeMaxTokens = (() => {
+      const n = Number(process.env.ANALYZE_MAX_TOKENS || process.env.LLM_MAX_TOKENS)
+      return Number.isFinite(n) && n >= 128 ? Math.round(n) : 2048
+    })()
+
     const createClient = (model: string, provider?: string) => LLMFactory.create({
       provider: provider ?? this.config.llmProvider,
       model,
       temperature: this.config.temperature,
       baseUrl: provider !== 'google' ? this.config.backendUrl : undefined,
+      // 壓低 max_tokens 預算：部分模型（如 big-pickle）輸出預算較小，
+      // 若請求過大的 max_tokens 會被上游回 413 Request Entity Too Large。
+      maxTokens: this.analyzeMaxTokens,
     })
 
     this.deepLLM = createClient(this.config.deepThinkModel)
