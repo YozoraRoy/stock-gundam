@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { AnalysisState, Rating } from '@stock/core'
 import type { LLMClient } from '../../llm/client.js'
+import { truncateField } from '../../context.js'
 
 const ResearchPlanSchema = z.object({
   recommendation: z.enum(['Buy', 'Overweight', 'Hold', 'Underweight', 'Sell']).optional(),
@@ -29,9 +30,9 @@ export function createResearchManager(llm: LLMClient) {
     const prompt = [
       `You are the Research Manager. Synthesize the bull/bear debate and produce an investment plan.`,
       '',
-      state.instrumentContext,
-      `Bull arguments: ${state.investDebate.bullHistory}`,
-      `Bear arguments: ${state.investDebate.bearHistory}`,
+      truncateField(state.instrumentContext, 'Resources:'),
+      truncateField(state.investDebate.bullHistory, `Bull arguments:`),
+      truncateField(state.investDebate.bearHistory, `Bear arguments:`),
       '',
       `Rate: Buy / Overweight / Hold / Underweight / Sell`,
       `Provide rationale and strategic actions.`,

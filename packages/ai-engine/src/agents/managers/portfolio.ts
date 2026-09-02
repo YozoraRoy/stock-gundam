@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { AnalysisState } from '@stock/core'
 import type { LLMClient } from '../../llm/client.js'
+import { truncateField } from '../../context.js'
 
 const PortfolioDecisionSchema = z.object({
   rating: z.enum(['Buy', 'Overweight', 'Hold', 'Underweight', 'Sell']).optional(),
@@ -28,11 +29,11 @@ export function createPortfolioManager(llm: LLMClient) {
     const prompt = [
       `You are the Portfolio Manager. Synthesize the risk debate into the final trading decision.`,
       '',
-      state.instrumentContext,
-      `Past lessons: ${state.pastContext}`,
-      `Investment Plan: ${state.investmentPlan}`,
-      `Trader Proposal: ${state.traderProposal}`,
-      `Risk Debate: ${state.riskDebate.history}`,
+      truncateField(state.instrumentContext, 'Resources:'),
+      truncateField(state.pastContext, `Past lessons:`),
+      truncateField(state.investmentPlan, `Investment Plan:`),
+      truncateField(state.traderProposal, `Trader Proposal:`),
+      truncateField(state.riskDebate.history, `Risk Debate:`),
       '',
       `Rating scale: Buy / Overweight / Hold / Underweight / Sell`,
       'Be decisive and ground every conclusion in specific evidence.',

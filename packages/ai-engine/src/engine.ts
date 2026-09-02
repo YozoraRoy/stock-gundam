@@ -148,6 +148,9 @@ export class TradingEngine {
           apiKey,
           baseUrl,
           temperature: this.config.temperature,
+          // 同樣壓低 max_tokens：否則 fallback（如 Groq）會因請求過大的
+          // max_tokens 直接回 413 request_too_large。
+          maxTokens: this.analyzeMaxTokens,
         })
       }
 

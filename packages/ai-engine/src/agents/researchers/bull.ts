@@ -1,5 +1,6 @@
 import type { AnalysisState } from '@stock/core'
 import type { LLMClient } from '../../llm/client.js'
+import { buildSynthesizedReports } from '../../context.js'
 
 export function createBullResearcher(llm: LLMClient) {
   return async (state: AnalysisState): Promise<Partial<AnalysisState>> => {
@@ -11,11 +12,13 @@ export function createBullResearcher(llm: LLMClient) {
       `You are a Bull Analyst advocating FOR investing in ${state.ticker}.`,
       '',
       `Resources:`,
-      state.instrumentContext,
-      `Market Report: ${marketReport}`,
-      `Sentiment: ${sentimentReport}`,
-      `News: ${newsReport}`,
-      `Fundamentals: ${fundamentalsReport}`,
+      buildSynthesizedReports({
+        instrumentContext: state.instrumentContext,
+        marketReport,
+        sentimentReport,
+        newsReport,
+        fundamentalsReport,
+      }),
       `Debate history: ${history}`,
       `Last bear argument: ${lastBear}`,
       '',

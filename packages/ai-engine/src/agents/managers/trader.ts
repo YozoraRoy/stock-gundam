@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { AnalysisState } from '@stock/core'
 import type { LLMClient } from '../../llm/client.js'
+import { truncateField } from '../../context.js'
 
 const PositionSizingSchema = z.union([
   z.string(),
@@ -75,8 +76,8 @@ export function createTrader(llm: LLMClient) {
     const prompt = [
       `You are the Trader. Convert the Research Manager's plan into a concrete trade proposal.`,
       '',
-      state.instrumentContext,
-      `Investment Plan: ${state.investmentPlan}`,
+      truncateField(state.instrumentContext, 'Resources:'),
+      truncateField(state.investmentPlan, `Investment Plan:`),
       '',
       `Specify: action (Buy/Hold/Sell), reasoning, entry price, stop loss, and position sizing.`,
       '',
