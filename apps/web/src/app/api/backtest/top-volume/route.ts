@@ -131,7 +131,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const rawRange = searchParams.get('range') ?? 'day'
   const range: Range = rawRange === 'week' || rawRange === 'month' || rawRange === 'quarter' ? rawRange : 'day'
-  const count = 10
+  const count = 20
 
   const cacheKey = range
   const hit = cache.get(cacheKey)

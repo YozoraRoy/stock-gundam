@@ -91,6 +91,7 @@ export async function POST(req: Request) {
             modelPlan,
             language: outputLanguage,
             enabledAgents,
+            assetType: state.assetType,
             reports: {
               market: state.marketReport,
               sentiment: state.sentimentReport,

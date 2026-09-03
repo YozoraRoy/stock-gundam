@@ -11,7 +11,7 @@ import {
   ReferenceDot,
   ResponsiveContainer,
 } from 'recharts'
-import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Activity, ListOrdered, X } from 'lucide-react'
+import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Activity, ListOrdered, X, Zap } from 'lucide-react'
 import { searchStocks, StockCandidateList, type StockCandidate } from '@/components/stock-search'
 
 interface SeriesPoint {
@@ -74,6 +74,18 @@ interface TopVolumeItem {
 }
 
 type TopVolumeRange = 'day' | 'week' | 'month' | 'quarter'
+
+interface TopInsight {
+  symbol: string
+  bestThreshold: number | null
+  currentBias: number | null
+  ma60: number | null
+  livePrice: number | null
+  asOf: number | null
+  targetPrice: number | null
+  inEntryZone: boolean
+  distanceToTargetPct: number | null
+}
 
 function fmtPct(v: number | null): string {
   if (v == null) return '—'
@@ -214,6 +226,7 @@ export default function BacktestPage() {
   const [topList, setTopList] = useState<TopVolumeItem[]>([])
   const [topLoading, setTopLoading] = useState(false)
   const [topError, setTopError] = useState<string | null>(null)
+  const [topInsights, setTopInsights] = useState<Record<string, TopInsight | 'loading' | 'error'>>({})
   const dropdownRef = useRef<HTMLDivElement | null>(null)
 
   // 非純數字（可能是中文名稱）時，debounce 共用搜尋（/api/stocks/search）模糊搜尋台股
@@ -302,11 +315,12 @@ export default function BacktestPage() {
     await runFromSymbol(sym)
   }
 
-  // 抓取「成交量 Top 10」清單（依所選範圍）。
+  // 抓取「成交量 Top 20」清單（依所選範圍），並非同步逐檔計算進場閾值與目前乖離。
   const loadTop = async (range: TopVolumeRange) => {
     setTopRange(range)
     setTopLoading(true)
     setTopError(null)
+    setTopInsights({})
     try {
       const res = await fetch(`/api/backtest/top-volume?range=${range}`)
       const data = await res.json()
@@ -315,7 +329,13 @@ export default function BacktestPage() {
         setTopList([])
         return
       }
-      setTopList(data.results ?? [])
+      const list: TopVolumeItem[] = data.results ?? []
+      setTopList(list)
+      // 依成交量中位順序並發計算閾值/乖離（每檔獨立非同步，即時逐檔更新）。
+      for (const item of list) {
+        setTopInsights((m) => ({ ...m, [item.symbol]: 'loading' }))
+        fetchInsight(item.symbol)
+      }
     } catch {
       setTopError('網路錯誤，請稍後再試')
       setTopList([])
@@ -324,10 +344,26 @@ export default function BacktestPage() {
     }
   }
 
+  // 對單一股票計算「最佳進場閾值 + 目前乖離」，即時回寫到 state。
+  const fetchInsight = async (symbol: string) => {
+    try {
+      const res = await fetch(`/api/backtest/insight?symbol=${encodeURIComponent(symbol)}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setTopInsights((m) => ({ ...m, [symbol]: 'error' }))
+        return
+      }
+      setTopInsights((m) => ({ ...m, [symbol]: data as TopInsight }))
+    } catch {
+      setTopInsights((m) => ({ ...m, [symbol]: 'error' }))
+    }
+  }
+
   const openTop = () => {
     setShowTop(true)
     setTopList([])
     setTopError(null)
+    setTopInsights({})
     void loadTop('day')
   }
 
@@ -816,7 +852,7 @@ export default function BacktestPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <ListOrdered className="w-5 h-5 text-[var(--accent)]" />
-                <h2 className="text-base font-bold">台股成交量 Top 10（上市）</h2>
+                <h2 className="text-base font-bold">台股成交量 Top 20（上市）</h2>
               </div>
               <button
                 onClick={() => setShowTop(false)}
@@ -864,28 +900,60 @@ export default function BacktestPage() {
                 <div className="py-10 text-center text-[var(--text-secondary)] text-sm">查無資料</div>
               ) : (
                 <div className="max-h-96 overflow-y-auto">
-                  {topList.map((item) => (
-                    <button
-                      key={item.symbol}
-                      onClick={() => pickTopStock(item)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition text-left"
-                    >
-                      <span className="w-6 shrink-0 text-center font-mono text-xs text-[var(--text-secondary)]">
-                        {item.rank}
-                      </span>
-                      <span className="font-mono text-sm text-[var(--accent)] w-16 shrink-0">{item.symbol}</span>
-                      <span className="flex-1 text-sm text-[var(--text-primary)] truncate">{item.name}</span>
-                      <span className="text-sm text-[var(--text-primary)] font-medium tabular-nums">
-                        {fmtVolume(item.volume)}
-                      </span>
-                    </button>
-                  ))}
+                  {topList.map((item) => {
+                    const insight = topInsights[item.symbol]
+                    return (
+                      <button
+                        key={item.symbol}
+                        onClick={() => pickTopStock(item)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition text-left ${
+                          insight && insight !== 'loading' && insight !== 'error' && insight.inEntryZone
+                            ? 'bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20'
+                            : ''
+                        }`}
+                      >
+                        <span className="w-6 shrink-0 text-center font-mono text-xs text-[var(--text-secondary)]">
+                          {item.rank}
+                        </span>
+                        <span className="font-mono text-sm text-[var(--accent)] w-16 shrink-0">{item.symbol}</span>
+                        <span className="flex-1 min-w-0 text-sm text-[var(--text-primary)] truncate">{item.name}</span>
+                        <div className="shrink-0 text-right">
+                          <div className="text-sm text-[var(--text-primary)] font-medium tabular-nums">
+                            {fmtVolume(item.volume)}
+                          </div>
+                          {insight === 'loading' ? (
+                            <div className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] justify-end">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              計算閾值中...
+                            </div>
+                          ) : insight === 'error' ? (
+                            <div className="text-[11px] text-[var(--text-secondary)]">—</div>
+                          ) : insight ? (
+                            <div className="text-[11px] tabular-nums">
+                              {insight.inEntryZone ? (
+                                <span className="inline-flex items-center gap-1 text-[var(--accent-green)] font-semibold">
+                                  <Zap className="w-3 h-3" />
+                                  已達閾值（{fmtPct(insight.bestThreshold != null ? insight.bestThreshold / 100 : 0)}）· 進場區
+                                </span>
+                              ) : insight.distanceToTargetPct != null && insight.bestThreshold != null ? (
+                                <span className="text-[var(--text-secondary)]">
+                                  閾值 {fmtPct(insight.bestThreshold / 100)} · 距進場 -{insight.distanceToTargetPct.toFixed(1)}%
+                                </span>
+                              ) : (
+                                <span className="text-[var(--text-secondary)]">資料不足</span>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>
 
             <div className="px-5 pb-4 text-xs text-[var(--text-secondary)]">
-              點擊任一股票即自動填入代號並開始回測。
+              綠色標示表示目前已達進場閾值（在進場區）。點擊任一股票即自動填入代號並開始回測。
             </div>
           </div>
         </div>

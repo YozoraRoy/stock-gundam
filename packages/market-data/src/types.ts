@@ -50,4 +50,6 @@ export interface CompanyProfile {
   exchange?: string
   marketCap?: number
   description?: string
+  /** Yahoo 的標的分類，例如 "EQUITY"（個股）、"ETF"、空白表示未知。 */
+  quoteType?: string
 }

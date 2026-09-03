@@ -247,6 +247,7 @@ export class TradingEngine {
     let historyContext = ''
     let quote: any = null
     let profile: any = null
+    let assetTypeContext = ''
 
     try {
       onProgress?.('Data Fetcher', `Fetching real-time quote for ${resolvedTicker}...`)
@@ -272,6 +273,25 @@ export class TradingEngine {
       console.warn(`[TradingEngine] Failed to fetch profile for ${resolvedTicker}:`, e.message)
     }
 
+    // ── 標的類型偵測（ETF / 個股 / 指數）──
+    // 從 Yahoo profile 的 quoteType 判斷（"ETF" / "EQUITY" 等）。
+    // 找不到時回退到呼叫端明確指定的 options.assetType，最後才是預設個股。
+    // 分類會以文字注入 instrumentContext，讓每個後續 Agent 都能理解這是 ETF 或個股。
+    let detectedAssetType: AssetType | null = null
+    if (profile?.quoteType) {
+      const t = String(profile.quoteType).toUpperCase()
+      if (t.includes('ETF')) detectedAssetType = AssetType.ETF
+      else if (t.includes('INDEX')) detectedAssetType = AssetType.Index
+      else detectedAssetType = AssetType.Stock
+    }
+    const assetType: AssetType = detectedAssetType ?? options.assetType ?? AssetType.Stock
+    const assetTypeLabel = assetType === AssetType.ETF ? 'ETF（指數股票型基金）' : '個股（普通股）'
+    onProgress?.('Instrument Classifier', `Detected ${resolvedTicker} as ${assetType} (${assetTypeLabel})`)
+    assetTypeContext = `INSTRUMENT TYPE: This instrument is a ${assetType} (${assetTypeLabel}).
+- Analysts MUST treat it as a ${assetType === AssetType.ETF ? 'basket of underlying securities (ETF)' : 'single listed common stock'}.
+- ETF: no single-company financial statements / PE / PB / moat; focus on underlying index, holdings, expense ratio, premium/discount to NAV, and tracking error instead.
+- Stock: standard equity valuation (financial statements, PE/PB, moat) applies.`
+
     // Early-Exit Guard 門禁防禦：如果即時報價與 Profile 均無法獲取，代表無效股票代號，立即中斷阻斷！
     const hasValidQuote = quote && typeof quote.price === 'number' && quote.price > 0
     const hasValidProfile = profile && profile.name && profile.name !== resolvedTicker
@@ -292,7 +312,9 @@ ${recent.map(h => `- ${new Date(h.timestamp).toISOString().split('T')[0]}: Open 
       console.warn(`[TradingEngine] Failed to fetch historical data for ${resolvedTicker}:`, e.message)
     }
 
-    const instrumentContext = `The instrument to analyze is ${resolvedTicker}.
+    const instrumentContext = `${assetTypeContext}
+
+The instrument to analyze is ${resolvedTicker}.
 
 ${profileContext}
 
@@ -303,7 +325,7 @@ ${historyContext}`
     const initialState: AnalysisState = {
       ticker: resolvedTicker,
       tradeDate,
-      assetType: options.assetType ?? AssetType.Stock,
+      assetType,
       instrumentContext,
       pastContext: this.memory.getPastContext(ticker),
       outputLanguage,

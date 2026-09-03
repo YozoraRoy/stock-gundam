@@ -43,6 +43,7 @@ function AnalyzeContent() {
   const [language, setLanguage] = useState<AnalysisLanguage>('zh-TW')
   const [enabledAgents, setEnabledAgents] = useState<string[]>([...AGENT_KEYS])
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null)
+  const [assetType, setAssetType] = useState<string | null>(null)
 
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -204,10 +205,15 @@ function AnalyzeContent() {
                 const m = parsed.detail.match(/retrying in (\d+)s/)
                 if (m) setRetryCountdown(parseInt(m[1], 10))
               }
+              if (parsed.step === 'Instrument Classifier' && typeof parsed.detail === 'string') {
+                const cm = parsed.detail.match(/\bas (stock|etf|index|crypto|future)\b/i)
+                if (cm) setAssetType(cm[1].toLowerCase())
+              }
               break
             case 'result':
               setAnalysis(parsed)
               setRetryCountdown(null)
+              if (parsed.assetType) setAssetType(String(parsed.assetType).toLowerCase())
               fetchHistory()
               window.dispatchEvent(new Event('quota-updated'))
               break
@@ -315,6 +321,21 @@ function AnalyzeContent() {
       </div>
 
       <SearchBar onSearch={handleAnalyze} loading={loading} />
+
+      {assetType && (
+        <div className="mt-3">
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+              assetType === 'etf'
+                ? 'bg-[var(--accent)]/15 text-[var(--accent)] border-[var(--accent)]/30'
+                : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+            }`}
+          >
+            <Brain className="w-3.5 h-3.5" />
+            {assetType === 'etf' ? '判定為 ETF（指數股票型基金）' : assetType === 'index' ? '判定為 指數' : '判定為 個股'}
+          </span>
+        </div>
+      )}
 
       <AnalysisOptions
         language={language}

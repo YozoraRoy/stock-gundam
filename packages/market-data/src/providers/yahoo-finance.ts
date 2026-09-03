@@ -6,6 +6,9 @@ import { TTLCache } from '../cache.js'
 /** 歷史日線快取：盤中資料不劇烈變動，擋掉重複請求避免觸發 Yahoo Rate Limit。 */
 const historyCache = new TTLCache<OHLCV[]>(15 * 60 * 1000)
 
+/** 標的類型（ETF / EQUITY）快取：很少變動，重用避免重複呼叫 Yahoo。 */
+const assetTypeCache = new TTLCache<string>(60 * 60 * 1000)
+
 interface YahooResult {
   chart?: {
     result?: Array<{
@@ -47,6 +50,30 @@ async function yahooFetch(path: string): Promise<any> {
     throw err
   } finally {
     clearTimeout(timeoutId)
+  }
+}
+
+/**
+ * 偵測標的類型（"ETF" / "EQUITY" / ...），使用 Yahoo search 的 quoteType 欄位。
+ * 用 search 而非 chart 或 quoteSummary，因為 ETF 的 quoteSummary modules（如 price）常回 404。
+ * 有 1 小時 TTL 快取；查無結果回空白字串。
+ */
+async function detectQuoteType(symbol: string): Promise<string> {
+  const cached = assetTypeCache.get(symbol)
+  if (cached !== undefined) return cached
+
+  try {
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&quotesCount=3`
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+    const data: any = await res.json()
+    const match = (data?.quotes ?? []).find(
+      (q: any) => (q.symbol ?? '').toUpperCase() === symbol.toUpperCase(),
+    )
+    const quoteType: string = match?.quoteType ?? ''
+    assetTypeCache.set(symbol, quoteType)
+    return quoteType
+  } catch (_) {
+    return ''
   }
 }
 
@@ -130,10 +157,11 @@ export const yahooFinanceProvider: MarketDataProvider = {
       industry: profile?.industry,
       exchange: profile?.exchange,
       description: profile?.longBusinessSummary,
+      quoteType: await detectQuoteType(symbol),
     }
   },
 
-  async searchSymbols(query: string): Promise<Array<{ symbol: string; name: string; market: string }>> {
+  async searchSymbols(query: string): Promise<Array<{ symbol: string; name: string; market: string; quoteType?: string }>> {
     const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10`
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })
     const data: any = await res.json()
@@ -141,6 +169,7 @@ export const yahooFinanceProvider: MarketDataProvider = {
       symbol: q.symbol,
       name: q.shortname ?? q.longname ?? q.symbol,
       market: q.exchange ?? 'US',
+      quoteType: q.quoteType,
     }))
   },
 }
