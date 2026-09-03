@@ -5,7 +5,7 @@ import { Footer } from '@/components/footer'
 import { getCurrentUserFromCookies } from '@/lib/auth'
 
 export const metadata: Metadata = {
-  title: 'Stock Gundam',
+  title: 'Vestential',
   description: 'AI-powered stock analysis platform',
 }
 

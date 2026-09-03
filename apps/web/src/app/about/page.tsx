@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Search, PieChart, Wallet, Activity, TrendingUp, Clock } from 'lucide-react'
 
 export const metadata = {
-  title: '關於我們 — Stock Gundam',
+  title: '關於我們 — Vestential',
 }
 
 const steps = [
@@ -32,11 +32,11 @@ const steps = [
 export default function AboutPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-16">
-      <h1 className="text-2xl font-bold mb-8">關於 Stock Gundam</h1>
+      <h1 className="text-2xl font-bold mb-8">關於 Vestential</h1>
       <div className="prose prose-invert max-w-none space-y-8 text-sm text-[var(--text-secondary)] leading-relaxed">
         <section>
           <p>
-            Stock Gundam 不是「報明牌」的工具，而是一個陪你把錢慢慢變大的夥伴。我們相信：真正的財富成長，
+            Vestential 不是「報明牌」的工具，而是一個陪你把錢慢慢變大的夥伴。我們相信：真正的財富成長，
             來自於<span className="text-[var(--text-primary)] font-medium">簡單、可重複的指標</span>、
             <span className="text-[var(--text-primary)] font-medium">紀律</span>與
             <span className="text-[var(--text-primary)] font-medium">時間的複利</span>——而不是追求一夜暴富。
@@ -113,7 +113,7 @@ export default function AboutPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">開源</h2>
           <p>
-            本專案原始碼公開於 <a href="https://github.com/YozoraRoy/stock-gundam" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">GitHub</a>，歡迎回饋與貢獻。
+            本專案原始碼公開於 <a href="https://github.com/YozoraRoy/vestential" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">GitHub</a>，歡迎回饋與貢獻。
           </p>
         </section>
 

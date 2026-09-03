@@ -63,7 +63,7 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <TrendingUp className="w-6 h-6 text-[var(--accent)]" />
-          <span className="text-lg font-bold">Stock Gundam</span>
+          <span className="text-lg font-bold">Vestential</span>
         </Link>
         <div className="flex items-center gap-1">
           <nav className="flex items-center gap-1 mr-2">

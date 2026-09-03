@@ -72,7 +72,7 @@ function LoginContent() {
     <div className="min-h-[60vh] flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-[var(--bg-card)] rounded-2xl border border-white/5 p-8">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-1">登入 Stock Gundam</h1>
+          <h1 className="text-2xl font-bold mb-1">登入 Vestential</h1>
           <p className="text-sm text-[var(--text-secondary)]">
             登入後即可使用 AI 分析（每日 3 次額度）
           </p>

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 export const metadata = {
-  title: '服務條款 — Stock Gundam',
+  title: '服務條款 — Vestential',
 }
 
 export default function TermsPage() {
@@ -12,7 +12,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">一、服務說明</h2>
           <p>
-            Stock Gundam（以下簡稱「本平台」）提供 AI 股票分析、零股行情查詢、個人損益試算與歷史回測等功能，旨在作為投資研究輔助工具。
+            Vestential（以下簡稱「本平台」）提供 AI 股票分析、零股行情查詢、個人損益試算與歷史回測等功能，旨在作為投資研究輔助工具。
           </p>
         </section>
 
@@ -60,7 +60,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">七、聯絡方式</h2>
           <p>
-            如有疑問，請至 <a href="https://github.com/YozoraRoy/stock-gundam/issues" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">GitHub Issues</a> 提出。
+            如有疑問，請至 <a href="https://github.com/YozoraRoy/vestential/issues" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">GitHub Issues</a> 提出。
           </p>
         </section>
 

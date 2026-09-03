@@ -88,8 +88,8 @@ git push origin main    # ← 觸發 .github/workflows/deploy.yml
 
 **確認部署**：
 ```bash
-gh run list --repo YozoraRoy/stock-gundam --limit 3
-gh run watch <run-id> --repo YozoraRoy/stock-gundam --exit-status
+gh run list --repo YozoraRoy/vestential --limit 3
+gh run watch <run-id> --repo YozoraRoy/vestential --exit-status
 ```
 或到 GitHub → Actions → Deploy to Azure 頁面查看。成功需約 8-9 分鐘。
 

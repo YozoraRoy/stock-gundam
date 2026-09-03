@@ -1,4 +1,4 @@
-# Stock Gundam 台灣股票 AI 分析與零股紀念品情報平台
+# Vestential 台灣股票 AI 分析與零股紀念品情報平台
 
 基於 Next.js 15 與多 AI 代理人 (Multi-Agent Architecture) 打造的台灣股票與美股 AI 深度分析、零股盤後行情、股東會紀念品情報與個人損益試算平台。
 
@@ -228,7 +228,7 @@ git push origin main   # ← 自動觸發部署
 
 **流程**：GitHub Runner 上執行 `npm ci` → `npm run local-build` → 打包含 `node_modules` 的 `deploy.zip`（禁雲端 Oryx 建置，解決 B1 記憶體不足）→ 設定環境變數 → 透過 Kudu `zipdeploy?clean=true` 部署至 Azure。
 
-**需要的 GitHub Secrets**（需在 `https://github.com/YozoraRoy/stock-gundam/settings/secrets/actions` 設定）：
+**需要的 GitHub Secrets**（需在 `https://github.com/YozoraRoy/vestential/settings/secrets/actions` 設定）：
 
 | Secret | 內容 | 對應 Azure App Setting |
 |--------|------|--------------------------|
@@ -331,7 +331,7 @@ openssl rand -base64 32
 LINE 不允許 localhost callback，請用 `/api/auth/dev-login` 或先在線上驗證 LINE。
 
 * **線上體驗網站**：[https://stock-platform-roy.azurewebsites.net](https://stock-platform-roy.azurewebsites.net)
-* **GitHub 倉庫**：[https://github.com/YozoraRoy/stock-gundam](https://github.com/YozoraRoy/stock-gundam)
+* **GitHub 倉庫**：[https://github.com/YozoraRoy/vestential](https://github.com/YozoraRoy/vestential)
 
 ---
 

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 export const metadata = {
-  title: '隱私權政策 — Stock Gundam',
+  title: '隱私權政策 — Vestential',
 }
 
 export default function PrivacyPage() {
@@ -12,7 +12,7 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">一、資料收集</h2>
           <p>
-            Stock Gundam（以下簡稱「本平台」）透過 OAuth 第三方登入（Google、GitHub）取得您的顯示名稱與電子郵件地址，作為帳號識別之用。本平台不會收集或儲存您的密碼。
+            Vestential（以下簡稱「本平台」）透過 OAuth 第三方登入（Google、GitHub）取得您的顯示名稱與電子郵件地址，作為帳號識別之用。本平台不會收集或儲存您的密碼。
           </p>
           <p>
             當您使用圖片辨識功能時，上傳的圖片會傳送至第三方 AI 服務（Google Gemini 或 OpenAI 相容端點）進行辨識，處理完成後不會永久留存原始圖片。
