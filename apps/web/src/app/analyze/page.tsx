@@ -9,6 +9,13 @@ import { AnalysisCard } from '@/components/analysis-card'
 import { ProgressPanel } from '@/components/progress-panel'
 import { AnalysisOptions } from '@/components/analysis-options'
 
+function formatLLMError(raw: string): string {
+  if (/rate.?limit|429|tokens per minute|TPM|exhausted/i.test(raw)) {
+    return 'AI 模型額度暫時用完，請稍後再試（約 1 分鐘後）'
+  }
+  return raw
+}
+
 interface AnalysisRecord {
   id: number
   ticker: string
@@ -35,9 +42,11 @@ function AnalyzeContent() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [language, setLanguage] = useState<AnalysisLanguage>('zh-TW')
   const [enabledAgents, setEnabledAgents] = useState<string[]>([...AGENT_KEYS])
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null)
 
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // 讀取目前使用者是否為管理者（LINE 帳號 Roy）
   useEffect(() => {
@@ -105,6 +114,18 @@ function AnalyzeContent() {
   useEffect(() => {
     fetchHistory(symbolParam)
   }, [fetchHistory, symbolParam])
+
+  // LLM 重試倒數計時器
+  useEffect(() => {
+    if (retryCountdown === null || retryCountdown <= 0) return
+    retryTimerRef.current = setInterval(() => {
+      setRetryCountdown(prev => {
+        if (prev === null || prev <= 1) return null
+        return prev - 1
+      })
+    }, 1000)
+    return () => { if (retryTimerRef.current) clearInterval(retryTimerRef.current) }
+  }, [retryCountdown !== null])
 
   const handleAnalyze = useCallback(async (symbol: string) => {
     if (enabledAgents.length === 0) {
@@ -179,15 +200,20 @@ function AnalyzeContent() {
           switch (eventType) {
             case 'progress':
               setProgress(prev => [...prev, parsed])
+              if (parsed.step === 'LLM' && typeof parsed.detail === 'string') {
+                const m = parsed.detail.match(/retrying in (\d+)s/)
+                if (m) setRetryCountdown(parseInt(m[1], 10))
+              }
               break
             case 'result':
               setAnalysis(parsed)
-              // 分析成功後刷新歷史列表，並通知 header 更新剩餘次數
+              setRetryCountdown(null)
               fetchHistory()
               window.dispatchEvent(new Event('quota-updated'))
               break
             case 'error':
-              setError(parsed.message)
+              setError(formatLLMError(parsed.message))
+              setRetryCountdown(null)
               break
           }
         }
@@ -198,7 +224,9 @@ function AnalyzeContent() {
       }
     } finally {
       setLoading(false)
+      setRetryCountdown(null)
       if (timerRef.current) clearInterval(timerRef.current)
+      if (retryTimerRef.current) clearInterval(retryTimerRef.current)
       abortRef.current = null
     }
   }, [fetchHistory, language, enabledAgents])
@@ -307,15 +335,34 @@ function AnalyzeContent() {
         <div className={loading ? 'lg:col-span-2' : 'lg:col-span-3'}>
           {loading && (
             <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-white/5 mb-6">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-2 h-2 bg-[var(--accent)] rounded-full animate-pulse" />
-                <span className="text-sm font-medium">
-                  Running analysis... ({minutes}:{String(seconds).padStart(2, '0')})
-                </span>
-              </div>
-              <div className="text-xs text-[var(--text-secondary)]">
-                Running 8 AI agents sequentially via OpenCode LLM models
-              </div>
+              {retryCountdown !== null ? (
+                <>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+                    <span className="text-sm font-medium text-amber-400">
+                      Rate limited, retrying in {retryCountdown}s...
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/5 rounded-full h-1.5 mt-2">
+                    <div
+                      className="bg-amber-400 h-1.5 rounded-full transition-all duration-1000"
+                      style={{ width: `${(retryCountdown / (retryCountdown + 1)) * 100}%` }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2 h-2 bg-[var(--accent)] rounded-full animate-pulse" />
+                    <span className="text-sm font-medium">
+                      Running analysis... ({minutes}:{String(seconds).padStart(2, '0')})
+                    </span>
+                  </div>
+                  <div className="text-xs text-[var(--text-secondary)]">
+                    Running 8 AI agents sequentially via OpenCode LLM models
+                  </div>
+                </>
+              )}
             </div>
           )}
 

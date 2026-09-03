@@ -31,4 +31,6 @@ export interface LLMClient {
   onUsage?: (usage: LLMUsage) => void
   /** Optional hook invoked after each successful LLM call with model attribution. */
   onCall?: (info: LLMCallInfo) => void
+  /** Optional hook invoked when the client is about to wait before retrying (e.g. 429 rate-limit). */
+  onRetry?: (retryAfterMs: number) => void
 }

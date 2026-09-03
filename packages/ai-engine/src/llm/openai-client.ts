@@ -8,6 +8,7 @@ type ContentPart =
 export class OpenAICompatibleClient implements LLMClient {
   onUsage?: (usage: LLMUsage) => void
   onCall?: (info: LLMCallInfo) => void
+  onRetry?: (retryAfterMs: number) => void
 
   constructor(private config: LLMConfig) {}
 
@@ -56,7 +57,7 @@ export class OpenAICompatibleClient implements LLMClient {
   }
 
   private async callAPI(messages: { role: string; content: string | ContentPart[] }[]): Promise<string> {
-    const maxRetries = 3
+    const maxRetries = Number(process.env.LLM_MAX_RETRIES) || 5
     const timeoutMs = Number(process.env.LLM_TIMEOUT_MS) || 180_000
     const maxTokens = this.config.maxTokens ?? (Number(process.env.LLM_MAX_TOKENS) || 8192)
     const disableThinking = (process.env.LLM_DISABLE_THINKING ?? 'true').toLowerCase() !== 'false'
@@ -142,8 +143,12 @@ export class OpenAICompatibleClient implements LLMClient {
           // 比固定 1.5s 背退更能讓該次呼叫真正成功。
           const tpm = e?.message?.match(/try again in ([\d.]+)s/i)
           const tpmWaitMs = tpm ? Number(tpm[1]) * 1000 : 0
-          const waitMs = tpmWaitMs > 0 && tpmWaitMs <= 35_000 ? tpmWaitMs + 1000 : 1500 * attempt
+          // 等待 API 建議的時間 + 緩衝，避免 TPM 尚未完全重置
+          const waitMs = tpmWaitMs > 0
+            ? Math.min(tpmWaitMs + 5000, 90_000)
+            : Math.min(3000 * attempt, 30_000)
           console.warn(`[OpenAIClient] retrying in ${Math.round(waitMs / 1000)}s`)
+          this.onRetry?.(waitMs)
           await new Promise((r) => setTimeout(r, waitMs))
           continue
         }

@@ -151,6 +151,9 @@ export async function runPortfolioAnalysis(
   const { llm, fallbackModel } = createQuickLLM(config)
   const framework = getFramework(input.strategyId)
 
+  // 讓 LLM 重試等待時能通知前端顯示倒數
+  llm.onRetry = (retryAfterMs: number) => input.onProgress?.('LLM', `retrying in ${Math.round(retryAfterMs / 1000)}s`)
+
   input.onProgress?.('組合分析師', '整理部位與法則')
   const systemPrompt = [
     '你是專業的個人投資組合分析師。',

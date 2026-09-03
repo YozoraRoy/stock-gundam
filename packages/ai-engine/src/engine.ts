@@ -223,6 +223,11 @@ export class TradingEngine {
     onProgress?.('Symbol Normalizer', 'Resolving ticker symbol...')
     const resolvedTicker = await resolveSymbol(ticker)
 
+    // 讓 LLM 重試等待時能通知前端顯示倒數
+    const onRetry = (retryAfterMs: number) => onProgress?.('LLM', `retrying in ${Math.round(retryAfterMs / 1000)}s`)
+    this.deepLLM.onRetry = onRetry
+    this.quickLLM.onRetry = onRetry
+
     const outputLanguage: AnalysisLanguage =
       options.language ?? (this.config.outputLanguage as AnalysisLanguage) ?? DEFAULT_ANALYSIS_LANGUAGE
     const outputInstruction = buildAnalysisLanguageInstruction(outputLanguage, this.config.twdUsdRate)

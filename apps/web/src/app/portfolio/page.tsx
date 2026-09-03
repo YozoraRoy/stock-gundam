@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation'
 import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp, Upload, Trash2, CheckCircle2, Plus, X, Search } from 'lucide-react'
 import { searchStocks, StockCandidateList } from '@/components/stock-search'
 
+function formatLLMError(raw: string): string {
+  if (/rate.?limit|429|tokens per minute|TPM|exhausted/i.test(raw)) {
+    return 'AI 模型額度暫時用完，請稍後再試（約 1 分鐘後）'
+  }
+  return raw
+}
+
 type Market = 'tw' | 'us'
 
 const STRATEGIES = [
@@ -113,12 +120,14 @@ export default function PortfolioPage() {
   const [savedResult, setSavedResult] = useState<(PnL & { id: number; market: Market; symbol: string; symbolName?: string }) | null>(null)
   const [aiResult, setAiResult] = useState<{ advice: Advice; strategy: { nameZh: string; nameEn: string }; usedFallback?: boolean } | null>(null)
   const [progress, setProgress] = useState<{ step: string; detail: string }[]>([])
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null)
 
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [showAdd, setShowAdd] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [recognizing, setRecognizing] = useState(false)
@@ -394,6 +403,18 @@ export default function PortfolioPage() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
+  // LLM 重試倒數計時器
+  useEffect(() => {
+    if (retryCountdown === null || retryCountdown <= 0) return
+    retryTimerRef.current = setInterval(() => {
+      setRetryCountdown(prev => {
+        if (prev === null || prev <= 1) return null
+        return prev - 1
+      })
+    }, 1000)
+    return () => { if (retryTimerRef.current) clearInterval(retryTimerRef.current) }
+  }, [retryCountdown !== null])
+
   const handleFetchQuote = async () => {
     const sym = symbol.trim()
     if (!sym) {
@@ -504,18 +525,29 @@ export default function PortfolioPage() {
           }
           if (!data) continue
           const parsed = JSON.parse(data)
-          if (eventType === 'progress') setProgress(prev => [...prev, parsed])
-          else if (eventType === 'result') {
+          if (eventType === 'progress') {
+            setProgress(prev => [...prev, parsed])
+            if (parsed.step === 'LLM' && typeof parsed.detail === 'string') {
+              const m = parsed.detail.match(/retrying in (\d+)s/)
+              if (m) setRetryCountdown(parseInt(m[1], 10))
+            }
+          } else if (eventType === 'result') {
             setAiResult(parsed)
+            setRetryCountdown(null)
             window.dispatchEvent(new Event('quota-updated'))
             await fetchHistory()
-          } else if (eventType === 'error') setError(parsed.message)
+          } else if (eventType === 'error') {
+            setError(formatLLMError(parsed.message))
+            setRetryCountdown(null)
+          }
         }
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') setError(e.message)
     } finally {
       setAnalyzing(false)
+      setRetryCountdown(null)
+      if (retryTimerRef.current) clearInterval(retryTimerRef.current)
       abortRef.current = null
     }
   }
@@ -964,6 +996,14 @@ export default function PortfolioPage() {
 
           {analyzing && (
             <div className="space-y-1">
+              {retryCountdown !== null && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+                  <span className="text-xs font-medium text-amber-400">
+                    Rate limited, retrying in {retryCountdown}s...
+                  </span>
+                </div>
+              )}
               {progress.map((p, i) => (
                 <p key={i} className="text-xs text-[var(--text-secondary)]">
                   {p.step}: {p.detail}
