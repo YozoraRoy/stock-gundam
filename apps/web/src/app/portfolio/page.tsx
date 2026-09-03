@@ -4,23 +4,32 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useRouter } from 'next/navigation'
 import { TrendingUp, Zap, RefreshCw, Sparkles, History, ChevronDown, ChevronUp, Upload, Trash2, CheckCircle2, Plus, X, Search } from 'lucide-react'
 import { searchStocks, StockCandidateList } from '@/components/stock-search'
+import { useI18n } from '@/i18n/LanguageProvider'
 
-function formatLLMError(raw: string): string {
+function formatLLMError(raw: string, llmRateLimited: string): string {
   if (/rate.?limit|429|tokens per minute|TPM|exhausted/i.test(raw)) {
-    return 'AI 模型額度暫時用完，請稍後再試（約 1 分鐘後）'
+    return llmRateLimited
   }
   return raw
 }
 
 type Market = 'tw' | 'us'
 
-const STRATEGIES = [
-  { id: 'buffett', nameZh: '巴菲特價值投資', nameEn: 'Value Investing' },
-  { id: 'growth', nameZh: '成長股投資', nameEn: 'Growth Investing' },
-  { id: 'dividend', nameZh: '股息現金流投資', nameEn: 'Dividend Investing' },
-  { id: 'momentum', nameZh: '技術面順勢投資', nameEn: 'Momentum' },
-  { id: 'balanced', nameZh: '穩健風險控管', nameEn: 'Balanced Risk' },
-]
+function buildStrategies(ui: {
+  strategyBuffett: string; strategyBuffettEn: string;
+  strategyGrowth: string; strategyGrowthEn: string;
+  strategyDividend: string; strategyDividendEn: string;
+  strategyMomentum: string; strategyMomentumEn: string;
+  strategyBalanced: string; strategyBalancedEn: string;
+}) {
+  return [
+    { id: 'buffett', nameZh: ui.strategyBuffett, nameEn: ui.strategyBuffettEn },
+    { id: 'growth', nameZh: ui.strategyGrowth, nameEn: ui.strategyGrowthEn },
+    { id: 'dividend', nameZh: ui.strategyDividend, nameEn: ui.strategyDividendEn },
+    { id: 'momentum', nameZh: ui.strategyMomentum, nameEn: ui.strategyMomentumEn },
+    { id: 'balanced', nameZh: ui.strategyBalanced, nameEn: ui.strategyBalancedEn },
+  ]
+}
 
 interface PnL {
   costBasis: number
@@ -101,6 +110,9 @@ function num(s: string): number | null {
 
 export default function PortfolioPage() {
   const router = useRouter()
+  const { dict } = useI18n()
+  const ui = dict.portfolio
+  const STRATEGIES = useMemo(() => buildStrategies(ui), [ui])
 
   const [market, setMarket] = useState<Market>('tw')
   const [symbol, setSymbol] = useState('')
@@ -146,19 +158,19 @@ export default function PortfolioPage() {
     const nPrice = num(currentPrice)
     const nDiv = num(dividend) ?? 0
     if (!symbol.trim()) {
-      setError('請輸入股票代號')
+      setError(ui.errSymbolRequired)
       return null
     }
     if (nShares == null || !(nShares > 0)) {
-      setError('持有股數需大於 0')
+      setError(ui.errSharesGreaterThanZero)
       return null
     }
     if (nCost == null || nCost < 0) {
-      setError('每股成本不能為負')
+      setError(ui.errCostNonNegative)
       return null
     }
     if (nPrice == null || !(nPrice > 0)) {
-      setError('每股現價需大於 0')
+      setError(ui.errPriceGreaterThanZero)
       return null
     }
     return {
@@ -197,10 +209,10 @@ export default function PortfolioPage() {
   const resizeImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
-      reader.onerror = () => reject(new Error('讀取圖片失敗'))
+      reader.onerror = () => reject(new Error(ui.errImageReadFailed))
       reader.onload = () => {
         const img = new Image()
-        img.onerror = () => reject(new Error('圖片格式無法辨識'))
+        img.onerror = () => reject(new Error(ui.errImageFormatUnknown))
         img.onload = () => {
           const MAX = 1600
           let { width, height } = img
@@ -214,7 +226,7 @@ export default function PortfolioPage() {
           canvas.height = height
           const ctx = canvas.getContext('2d')
           if (!ctx) {
-            reject(new Error('無法處理圖片'))
+            reject(new Error(ui.errImageCannotProcess))
             return
           }
           ctx.drawImage(img, 0, 0, width, height)
@@ -228,7 +240,7 @@ export default function PortfolioPage() {
 
   const handleRecognize = async (file: File) => {
     if (!file.type.startsWith('image/')) {
-      setError('請上傳圖片檔（PNG/JPG 等）')
+      setError(ui.errUploadImage)
       return
     }
     setError(null)
@@ -267,9 +279,9 @@ export default function PortfolioPage() {
       setRecognitionMethod(data.method === 'ocr' ? 'ocr' : data.method === 'vision' ? 'vision' : null)
       if (data.enriched) setEnrichState(data.enriched)
       if (data.quota) setRecognitionQuota(data.quota)
-      if (positions.length === 0) setError('未辨識到任何股票，請確認圖片清楚後重試')
+      if (positions.length === 0) setError(ui.errRecognizeNone)
     } catch (e: any) {
-      setError(e.message || '辨識失敗，請再試一次')
+      setError(e.message || ui.errRecognizeFailed)
     } finally {
       setRecognizing(false)
     }
@@ -291,12 +303,11 @@ export default function PortfolioPage() {
     setRecognized((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch, saved: false } : p)))
   }
 
-  /** 依代號或名稱搜尋股票，列出候選清單讓使用者挑正確的補齊欄位。 */
   const handleSearchStock = async (i: number) => {
     const p = recognized[i]
     const q = (p.symbolName || p.symbol || '').trim()
     if (!q) {
-      setError('請先填名稱或代號再搜尋')
+      setError(ui.errSearchFillNameOrSymbol)
       return
     }
     setError(null)
@@ -306,7 +317,7 @@ export default function PortfolioPage() {
       setSearchResults(results)
       setSearchFor(i)
     } catch {
-      setError('搜尋失敗，請稍後再試')
+      setError(ui.errSearchFailed)
     } finally {
       setSearchLoading(false)
     }
@@ -316,18 +327,18 @@ export default function PortfolioPage() {
     setSearchFor(null)
     const p = recognized[i]
     updateRecognized(i, { symbol: r.symbol.toUpperCase(), symbolName: r.name || undefined })
-    setNotice(`已填入 ${r.symbol}，正在抓取現價...`)
+    setNotice(ui.noticePickFilled.replace('{symbol}', r.symbol))
     try {
       const res = await fetch(`/api/portfolio/quote?symbol=${encodeURIComponent(r.symbol)}&market=${p.market}`)
       const data = await res.json()
       if (res.ok && typeof data.price === 'number') {
         updateRecognized(i, { currentPrice: data.price, symbolName: data.name || r.name || undefined })
-        setNotice(`已填入 ${data.symbol}（${data.name || r.name}）現價 ${data.price}`)
+        setNotice(ui.noticePickPriceFetched.replace('{symbol}', data.symbol).replace('{name}', data.name || r.name).replace('{price}', String(data.price)))
       } else {
-        setNotice(`已填入 ${r.symbol}，現價請手動輸入`)
+        setNotice(ui.noticePickManualPrice.replace('{symbol}', r.symbol))
       }
     } catch {
-      setNotice(`已填入 ${r.symbol}，現價請手動輸入`)
+      setNotice(ui.noticePickManualPrice.replace('{symbol}', r.symbol))
     }
   }
 
@@ -349,14 +360,14 @@ export default function PortfolioPage() {
       })
       const data = await res.json()
       if (data.error) {
-        setError(`「${p.symbol}」存檔失敗：${data.error}`)
+        setError(ui.errRecordSaveFailed.replace('{symbol}', p.symbol).replace('{error}', data.error))
         return false
       }
       updateRecognized(index, { saved: true })
       await fetchHistory()
       return true
     } catch {
-      setError(`「${p.symbol}」存檔發生錯誤`)
+      setError(ui.errRecordSaveError.replace('{symbol}', p.symbol))
       return false
     }
   }
@@ -369,7 +380,7 @@ export default function PortfolioPage() {
       if (r) ok++
     }
     if (ok > 0) {
-      setNotice(`已建立 ${ok} 筆持股紀錄`)
+      setNotice(ui.noticeCreatedRecords.replace('{n}', String(ok)))
       setShowAdd(false)
     } else {
       setNotice(null)
@@ -403,7 +414,6 @@ export default function PortfolioPage() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  // LLM 重試倒數計時器
   useEffect(() => {
     if (retryCountdown === null || retryCountdown <= 0) return
     retryTimerRef.current = setInterval(() => {
@@ -418,7 +428,7 @@ export default function PortfolioPage() {
   const handleFetchQuote = async () => {
     const sym = symbol.trim()
     if (!sym) {
-      setError('請先輸入股票代號')
+      setError(ui.errQuoteRequired)
       return
     }
     setQuoteLoading(true)
@@ -427,14 +437,14 @@ export default function PortfolioPage() {
       const res = await fetch(`/api/portfolio/quote?symbol=${encodeURIComponent(sym)}&market=${market}`)
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || '無法取得報價')
+        setError(data.error || ui.errQuoteFailed)
         return
       }
       setCurrentPrice(String(data.price))
       if (data.name) setSymbolName(data.name)
-      setNotice(`已取得 ${data.symbol} 即時報價：${data.price}`)
+      setNotice(ui.noticeFetchedQuote.replace('{symbol}', data.symbol).replace('{price}', String(data.price)))
     } catch (e: any) {
-      setError(e.message || '報價查詢失敗')
+      setError(e.message || ui.errQuoteFailed)
     } finally {
       setQuoteLoading(false)
     }
@@ -459,11 +469,11 @@ export default function PortfolioPage() {
         return
       }
       setSavedResult(data.record)
-      setNotice('已儲存損益試算紀錄')
+      setNotice(ui.noticeSavedPnlRecord)
       await fetchHistory()
       setShowAdd(false)
     } catch (e: any) {
-      setError(e.message || '儲存失敗')
+      setError(e.message || ui.noticeSaveFailed)
     } finally {
       setSaving(false)
     }
@@ -496,7 +506,7 @@ export default function PortfolioPage() {
           return
         }
         if (res.status === 429) {
-          setError(body.error || `今日額度已用完 (${body.quota?.used ?? 3}/3)`)
+          setError(body.error || ui.rateLimitError.replace('{used}', String(body.quota?.used ?? 3)))
           return
         }
         setError(body.error || `HTTP ${res.status}`)
@@ -537,7 +547,7 @@ export default function PortfolioPage() {
             window.dispatchEvent(new Event('quota-updated'))
             await fetchHistory()
           } else if (eventType === 'error') {
-            setError(formatLLMError(parsed.message))
+            setError(formatLLMError(parsed.message, ui.llmRateLimited))
             setRetryCountdown(null)
           }
         }
@@ -583,8 +593,8 @@ export default function PortfolioPage() {
         <div className="flex items-center gap-3">
           <TrendingUp className="w-8 h-8 text-[var(--accent-green)]" />
           <div>
-            <h1 className="text-2xl font-bold">個人損益試算</h1>
-            <p className="text-sm text-[var(--text-secondary)]">{showAdd ? '輸入持有部位，試算損益並套用投資法則取得 AI 建議' : '檢視持股損益紀錄，需要新增時點選右上角「新增」'}</p>
+            <h1 className="text-2xl font-bold">{ui.headerTitle}</h1>
+            <p className="text-sm text-[var(--text-secondary)]">{showAdd ? ui.headerSubtitleAdd : ui.headerSubtitleView}</p>
           </div>
         </div>
         {!showAdd && (
@@ -594,7 +604,7 @@ export default function PortfolioPage() {
             className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition"
           >
             <Plus className="w-4 h-4" />
-            新增
+            {ui.headerAdd}
           </button>
         )}
       </div>
@@ -604,14 +614,13 @@ export default function PortfolioPage() {
 
       {showAdd && (
         <>
-        {/* 新增持股面板 */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="text-base font-semibold flex items-center gap-2">
               <Plus className="w-4 h-4 text-[var(--accent)]" />
-              新增持股
+              {ui.addPanelTitle}
             </h2>
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5">手動輸入或使用 AI 圖片辨識建立損益紀錄</p>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">{ui.addPanelSubtitle}</p>
           </div>
           <button
             type="button"
@@ -619,24 +628,23 @@ export default function PortfolioPage() {
             className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-sm text-[var(--text-primary)] hover:bg-white/15 transition"
           >
             <X className="w-4 h-4" />
-            返回列表
+            {ui.addPanelBack}
           </button>
         </div>
 
-      {/* AI 圖片辨識上傳 */}
       <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-6 mb-6">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-medium flex items-center gap-2">
             <Upload className="w-4 h-4 text-[var(--accent)]" />
-            AI 圖片辨識上傳持股
+            {ui.aiUploadTitle}
           </h2>
           {recognitionQuota != null && (
             <span className="text-xs text-[var(--text-secondary)]">
-              今日剩餘辨識次數：<span className={recognitionQuota.remaining > 0 ? 'text-[var(--accent-green)]' : 'text-red-400'}>{recognitionQuota.remaining}</span> / {recognitionQuota.max}
+              {ui.aiUploadQuotaLabel.replace('{remaining}', String(recognitionQuota.remaining)).replace('{max}', String(recognitionQuota.max))}
             </span>
           )}
         </div>
-        <p className="text-xs text-[var(--text-secondary)] mb-4">上傳券商 App 持股截圖或對帳單照片，AI 自動辨識多檔股票，逐檔建立損益紀錄。</p>
+        <p className="text-xs text-[var(--text-secondary)] mb-4">{ui.aiUploadDesc}</p>
 
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} disabled={recognizing} />
         <div
@@ -659,12 +667,12 @@ export default function PortfolioPage() {
           {recognizing ? (
             <p className="text-sm text-[var(--text-secondary)] flex items-center justify-center gap-2">
               <span className="inline-block w-4 h-4 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
-              AI 辨識中，請稍候...
+              {ui.uploadRecognizing}
             </p>
           ) : (
             <>
-              <p className="text-sm text-[var(--text-primary)]">點擊或拖曳圖片到此處</p>
-              <p className="text-xs text-[var(--text-secondary)] mt-1">支援 PNG / JPG，最多 10MB（Screenshot / 拍照皆可）</p>
+              <p className="text-sm text-[var(--text-primary)]">{ui.uploadHintDrag}</p>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">{ui.uploadHintSupport}</p>
             </>
           )}
         </div>
@@ -672,15 +680,15 @@ export default function PortfolioPage() {
         {imagePreview && (
           <div className="mt-4">
             <div className="flex items-start gap-4 mb-4">
-              <img src={imagePreview} alt="上傳預覽" className="max-h-40 w-auto rounded-lg border border-white/10" />
+              <img src={imagePreview} alt={ui.altPreview} className="max-h-40 w-auto rounded-lg border border-white/10" />
               <div className="text-sm">
                 <p className="font-medium text-[var(--text-primary)]">
                   {recognized.length > 0
-                    ? <>辨識到 <span className="text-[var(--accent-green)]">{recognized.length}</span> 檔持股，請確認下方欄位</>
-                    : '上傳成功，等待 AI 辨識...'}
+                    ? <>{ui.previewDetected.replace('{n}', String(recognized.length))}</>
+                    : ui.previewWaitAi}
                 </p>
                 {recognized.length > 0 && recognitionMethod === 'ocr' && (
-                  <p className="mt-1 text-[11px] text-amber-400">本次辨識使用 OCR 備援，數字可能誤讀，請特別檢查股數與金額。</p>
+                  <p className="mt-1 text-[11px] text-amber-400">{ui.previewOcrFallback}</p>
                 )}
                 <button
                   type="button"
@@ -688,7 +696,7 @@ export default function PortfolioPage() {
                   disabled={recognizing}
                   className="mt-2 text-xs text-[var(--text-secondary)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-[var(--text-secondary)]"
                 >
-                  清除結果與圖片
+                  {ui.previewClearResult}
                 </button>
               </div>
             </div>
@@ -697,24 +705,24 @@ export default function PortfolioPage() {
               <div className="space-y-3">
                 {enrichState && (enrichState.symbols + enrichState.names + enrichState.prices) > 0 && (
                   <p className="text-[11px] text-[var(--accent)]">
-                    已自動補齊：代號 {enrichState.symbols} 檔、名稱 {enrichState.names} 檔、現價 {enrichState.prices} 檔（仍可手動修正，或點選右側
-                    <Search className="w-3 h-3 inline" /> 重新搜尋）
+                    {ui.enrichAutoFill.replace('{symbols}', String(enrichState.symbols)).replace('{names}', String(enrichState.names)).replace('{prices}', String(enrichState.prices))}
+                    <Search className="w-3 h-3 inline" /> {ui.enrichSearch}
                   </p>
                 )}
                 <div className="overflow-x-auto rounded-xl border border-white/10">
                   <table className="w-full text-xs min-w-[720px]">
                     <thead>
                       <tr className="text-left text-[var(--text-secondary)] border-b border-white/10 bg-[var(--bg-secondary)]/50">
-                        <th className="px-2 py-2 font-medium">#</th>
-                        <th className="px-2 py-2 font-medium">市場</th>
-                        <th className="px-2 py-2 font-medium">代號</th>
-                        <th className="px-2 py-2 font-medium">名稱</th>
-                        <th className="px-2 py-2 font-medium">股數</th>
-                        <th className="px-2 py-2 font-medium">每股成本</th>
-                        <th className="px-2 py-2 font-medium">現價</th>
-                        <th className="px-2 py-2 font-medium">股息</th>
-                        <th className="px-2 py-2 font-medium">狀態</th>
-                        <th className="px-2 py-2 font-medium text-right">操作</th>
+                        <th className="px-2 py-2 font-medium">{ui.colIndex}</th>
+                        <th className="px-2 py-2 font-medium">{ui.colMarket}</th>
+                        <th className="px-2 py-2 font-medium">{ui.colSymbol}</th>
+                        <th className="px-2 py-2 font-medium">{ui.colName}</th>
+                        <th className="px-2 py-2 font-medium">{ui.colShares}</th>
+                        <th className="px-2 py-2 font-medium">{ui.colCostPerShare}</th>
+                        <th className="px-2 py-2 font-medium">{ui.colCurrentPrice}</th>
+                        <th className="px-2 py-2 font-medium">{ui.colDividend}</th>
+                        <th className="px-2 py-2 font-medium">{ui.colStatus}</th>
+                        <th className="px-2 py-2 font-medium text-right">{ui.colAction}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -729,10 +737,10 @@ export default function PortfolioPage() {
                                   type="button"
                                   onClick={() => handleSearchStock(i)}
                                   className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 bg-[var(--bg-secondary)] text-[var(--accent)] hover:border-[var(--accent)] transition text-[10px]"
-                                  title="辨識缺代號或股價，點擊開啟候選清單同步補齊"
+                                  title={ui.btnSearchStock}
                                 >
                                   <RefreshCw className="w-3 h-3" />
-                                  同步
+                                  {ui.btnSync}
                                 </button>
                               )}
                             </div>
@@ -743,8 +751,8 @@ export default function PortfolioPage() {
                               onChange={e => updateRecognized(i, { market: e.target.value as Market })}
                               className="bg-[var(--bg-secondary)] border border-white/10 rounded px-1 py-1"
                             >
-                              <option value="tw">台股</option>
-                              <option value="us">美股</option>
+                              <option value="tw">{ui.marketTw}</option>
+                              <option value="us">{ui.marketUs}</option>
                             </select>
                           </td>
                           <td className="px-2 py-2">
@@ -757,7 +765,7 @@ export default function PortfolioPage() {
                           <td className="px-2 py-2">
                             <input
                               value={p.symbolName ?? ''}
-                              placeholder="名稱"
+                              placeholder={ui.placeholderName}
                               onChange={e => updateRecognized(i, { symbolName: e.target.value })}
                               className="w-24 bg-[var(--bg-secondary)] border border-white/10 rounded px-2 py-1"
                             />
@@ -793,10 +801,10 @@ export default function PortfolioPage() {
                           <td className="px-2 py-2">
                             {p.saved ? (
                               <span className="flex items-center gap-1 text-[var(--accent-green)]">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> 已存檔
+                                <CheckCircle2 className="w-3.5 h-3.5" /> {ui.statusSaved}
                               </span>
                             ) : (
-                              <span className="text-[var(--text-secondary)]">未存</span>
+                              <span className="text-[var(--text-secondary)]">{ui.statusUnsaved}</span>
                             )}
                           </td>
                           <td className="px-2 py-2">
@@ -805,7 +813,7 @@ export default function PortfolioPage() {
                                 type="button"
                                 onClick={() => handleSearchStock(i)}
                                 className="text-[var(--text-secondary)] hover:text-[var(--accent)]"
-                                title="搜尋股票補齊代號/名稱/現價"
+                                title={ui.btnSearchStock}
                               >
                                 <Search className="w-3.5 h-3.5" />
                               </button>
@@ -814,12 +822,12 @@ export default function PortfolioPage() {
                                   type="button"
                                   onClick={async () => {
                                     await fetchHistory()
-                                    setNotice(`「${p.symbol}」紀錄已更新`)
+                                    setNotice(ui.noticeRecordUpdated.replace('{symbol}', p.symbol))
                                     setExpandedId(null)
                                   }}
                                   className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                 >
-                                  查看紀錄
+                                  {ui.btnViewRecord}
                                 </button>
                               ) : (
                                 <button
@@ -827,14 +835,14 @@ export default function PortfolioPage() {
                                   onClick={() => saveRecognizedPosition(p, i)}
                                   className="text-[var(--accent)] hover:text-[var(--accent-green)]"
                                 >
-                                  建立
+                                  {ui.btnCreate}
                                 </button>
                               )}
                               <button
                                 type="button"
                                 onClick={() => setRecognized(prev => prev.filter((_, j) => j !== i))}
                                 className="text-[var(--text-secondary)] hover:text-red-400"
-                                title="刪除此列"
+                                title={ui.btnDeleteRow}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -851,7 +859,7 @@ export default function PortfolioPage() {
                                     loading={searchLoading}
                                     onPick={() => {}}
                                     layout="chips"
-                                    emptyText="查無結果，可直接手動輸入代號/名稱。"
+                                    emptyText={ui.searchEmptyResult}
                                     className="flex-auto"
                                   />
                                   <button
@@ -859,20 +867,20 @@ export default function PortfolioPage() {
                                     onClick={() => setSearchFor(null)}
                                     className="ml-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] shrink-0"
                                   >
-                                    <X className="w-3.5 h-3.5 inline" /> 關閉
+                                    <X className="w-3.5 h-3.5 inline" /> {ui.searchClose}
                                   </button>
                                 </div>
                               )}
                               {!searchLoading && searchResults.length > 0 && (
                                 <div>
                                   <div className="flex items-center justify-between gap-2 mb-1.5">
-                                    <p className="text-xs text-[var(--text-secondary)]">選取正確的股票（點選後自動填入代號/名稱並抓取現價）</p>
+                                    <p className="text-xs text-[var(--text-secondary)]">{ui.searchPickPrompt}</p>
                                     <button
                                       type="button"
                                       onClick={() => setSearchFor(null)}
                                       className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                     >
-                                      <X className="w-3.5 h-3.5 inline" /> 取消
+                                      <X className="w-3.5 h-3.5 inline" /> {ui.searchCancel}
                                     </button>
                                   </div>
                                   <StockCandidateList
@@ -893,14 +901,14 @@ export default function PortfolioPage() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <p className="text-xs text-[var(--text-secondary)]">可逐一修改欄位，確認無誤後再建立損益紀錄；修改欄位會重置為「未存」。</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{ui.editHint}</p>
                   <button
                     type="button"
                     onClick={saveAllRecognized}
                     className="shrink-0 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent-green)] text-white text-sm font-medium hover:opacity-90 transition"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    全部建立損益紀錄
+                    {ui.btnSaveAll}
                   </button>
                 </div>
               </div>
@@ -910,10 +918,9 @@ export default function PortfolioPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 輸入表單 */}
         <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-6 space-y-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">市場</span>
+            <span className="text-sm font-medium">{ui.formMarket}</span>
             <div className="flex rounded-lg overflow-hidden border border-white/10">
               {(['tw', 'us'] as Market[]).map(m => (
                 <button
@@ -922,14 +929,14 @@ export default function PortfolioPage() {
                   onClick={() => { setMarket(m); setSymbol(''); setSymbolName(''); setCurrentPrice('') }}
                   className={`px-4 py-1.5 text-sm transition ${market === m ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                 >
-                  {m === 'tw' ? '台股' : '美股'}
+                  {m === 'tw' ? ui.marketTw : ui.marketUs}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block text-sm text-[var(--text-secondary)] mb-1">股票代號 {market === 'tw' ? '(例如 2330 / 2330.TW)' : '(例如 AAPL / MSFT)'}</label>
+            <label className="block text-sm text-[var(--text-secondary)] mb-1">{ui.formSymbolLabel.replace('{example}', market === 'tw' ? ui.formSymbolExampleTw : ui.formSymbolExampleUs)}</label>
             <div className="flex gap-2">
               <input value={symbol} onChange={e => setSymbol(e.target.value)} placeholder={market === 'tw' ? '2330' : 'AAPL'} className={inputCls} />
               <button
@@ -939,7 +946,7 @@ export default function PortfolioPage() {
                 className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 text-sm hover:bg-white/15 transition disabled:opacity-50"
               >
                 {quoteLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                抓取現價
+                {ui.formFetchPrice}
               </button>
             </div>
             {symbolName && <p className="mt-1 text-xs text-[var(--accent)]">{symbolName}</p>}
@@ -947,25 +954,25 @@ export default function PortfolioPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">持有股數</label>
+              <label className="block text-sm text-[var(--text-secondary)] mb-1">{ui.formShares}</label>
               <input type="number" min="0" step="1" value={shares} onChange={e => setShares(e.target.value)} placeholder="1000" className={inputCls} />
             </div>
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">每股成本 ({currency})</label>
+              <label className="block text-sm text-[var(--text-secondary)] mb-1">{ui.formCostPerShare.replace('{currency}', currency)}</label>
               <input type="number" min="0" step="0.01" value={cost} onChange={e => setCost(e.target.value)} placeholder="100" className={inputCls} />
             </div>
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">每股現價 ({currency})</label>
+              <label className="block text-sm text-[var(--text-secondary)] mb-1">{ui.formPricePerShare.replace('{currency}', currency)}</label>
               <input type="number" min="0" step="0.01" value={currentPrice} onChange={e => setCurrentPrice(e.target.value)} placeholder="110" className={inputCls} />
             </div>
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">累計股息 ({currency})</label>
+              <label className="block text-sm text-[var(--text-secondary)] mb-1">{ui.formCumDividend.replace('{currency}', currency)}</label>
               <input type="number" min="0" step="0.01" value={dividend} onChange={e => setDividend(e.target.value)} placeholder="0" className={inputCls} />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm text-[var(--text-secondary)] mb-1">AI 投資法則</label>
+            <label className="block text-sm text-[var(--text-secondary)] mb-1">{ui.formStrategy}</label>
             <select value={strategyId} onChange={e => setStrategyId(e.target.value)} className={inputCls}>
               {STRATEGIES.map(s => (
                 <option key={s.id} value={s.id}>{s.nameZh}（{s.nameEn}）</option>
@@ -981,7 +988,7 @@ export default function PortfolioPage() {
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 text-sm font-medium hover:bg-white/15 transition disabled:opacity-50"
             >
               <History className="w-4 h-4" />
-              {saving ? '儲存中...' : '儲存損益試算'}
+              {saving ? ui.formSaving : ui.formSavePnl}
             </button>
             <button
               type="button"
@@ -990,7 +997,7 @@ export default function PortfolioPage() {
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
-              {analyzing ? 'AI 分析中...' : 'AI 分析建議'}
+              {analyzing ? ui.formAiAnalyzing : ui.formAiAnalyze}
             </button>
           </div>
 
@@ -1000,7 +1007,7 @@ export default function PortfolioPage() {
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
                   <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
                   <span className="text-xs font-medium text-amber-400">
-                    Rate limited, retrying in {retryCountdown}s...
+                    {ui.rateLimitRetrying.replace('{n}', String(retryCountdown))}
                   </span>
                 </div>
               )}
@@ -1013,39 +1020,38 @@ export default function PortfolioPage() {
           )}
         </div>
 
-        {/* 結果區 */}
         <div className="space-y-4">
           {savedResult && (
             <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-6">
               <h2 className="text-sm font-medium mb-4 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-[var(--accent-green)]" />
-                {savedResult.symbolName || savedResult.symbol} — 損益試算
+                {savedResult.symbolName || savedResult.symbol} — {ui.resultTitle}
               </h2>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-[var(--text-secondary)] text-xs">總成本</p>
+                  <p className="text-[var(--text-secondary)] text-xs">{ui.resultTotalCost}</p>
                   <p className="font-medium">{formatMoney(savedResult.costBasis, savedResult.market)}</p>
                 </div>
                 <div>
-                  <p className="text-[var(--text-secondary)] text-xs">目前市值</p>
+                  <p className="text-[var(--text-secondary)] text-xs">{ui.resultMarketValue}</p>
                   <p className="font-medium">{formatMoney(savedResult.marketValue, savedResult.market)}</p>
                 </div>
                 <div>
-                  <p className="text-[var(--text-secondary)] text-xs">未實現損益</p>
+                  <p className="text-[var(--text-secondary)] text-xs">{ui.resultUnrealizedPnl}</p>
                   <p className={`font-bold ${savedResult.unrealizedPnl >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
                     {formatMoney(savedResult.unrealizedPnl, savedResult.market)}{' '}
                     <span className="text-xs">{formatPct(savedResult.unrealizedPnlPct)}</span>
                   </p>
                 </div>
                 <div>
-                  <p className="text-[var(--text-secondary)] text-xs">含股息總報酬</p>
+                  <p className="text-[var(--text-secondary)] text-xs">{ui.resultTotalReturn}</p>
                   <p className={`font-bold ${savedResult.totalReturn >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
                     {formatMoney(savedResult.totalReturn, savedResult.market)}{' '}
                     <span className="text-xs">{formatPct(savedResult.totalReturnPct)}</span>
                   </p>
                 </div>
                 <div>
-                  <p className="text-[var(--text-secondary)] text-xs">股息殖利率（成本）</p>
+                  <p className="text-[var(--text-secondary)] text-xs">{ui.resultYieldOnCost}</p>
                   <p className="font-medium">{savedResult.yieldOnCost.toFixed(2)}%</p>
                 </div>
               </div>
@@ -1057,24 +1063,24 @@ export default function PortfolioPage() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-medium flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[var(--accent)]" />
-                  AI 建議（{aiResult.strategy.nameZh}）
+                  {ui.aiSuggestionTitle.replace('{strategy}', aiResult.strategy.nameZh)}
                 </h2>
                 <span className={`px-3 py-1 rounded-full text-xs font-bold ${RATING_STYLE[aiResult.advice.rating]?.text}`}
                   style={{ backgroundColor: `${RATING_STYLE[aiResult.advice.rating]?.bg}22` }}>
                   {aiResult.advice.rating}
                 </span>
               </div>
-              <p className="text-sm mb-1">信心度：{(aiResult.advice.confidence * 100).toFixed(0)}%</p>
+              <p className="text-sm mb-1">{ui.aiConfidence.replace('{pct}', (aiResult.advice.confidence * 100).toFixed(0))}</p>
               {(aiResult.advice.fairValue != null || aiResult.advice.marginOfSafety != null || aiResult.advice.upsideDownsidePct != null) && (
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)] mb-2">
-                  {aiResult.advice.fairValue != null && <span>合理價估值：{currency}{aiResult.advice.fairValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>}
-                  {aiResult.advice.marginOfSafety != null && <span>安全邊際：{aiResult.advice.marginOfSafety.toFixed(2)}%</span>}
-                  {aiResult.advice.upsideDownsidePct != null && <span>預期空間：{formatPct(aiResult.advice.upsideDownsidePct)}</span>}
+                  {aiResult.advice.fairValue != null && <span>{ui.aiFairValue.replace('{currency}', currency).replace('{value}', aiResult.advice.fairValue.toLocaleString('en-US', { maximumFractionDigits: 2 }))}</span>}
+                  {aiResult.advice.marginOfSafety != null && <span>{ui.aiMarginOfSafety.replace('{pct}', aiResult.advice.marginOfSafety.toFixed(2))}</span>}
+                  {aiResult.advice.upsideDownsidePct != null && <span>{ui.aiUpside.replace('{pct}', formatPct(aiResult.advice.upsideDownsidePct))}</span>}
                 </div>
               )}
               <p className="text-sm font-medium mb-2">{aiResult.advice.summary}</p>
               <div className="mb-2">
-                <p className="text-xs text-[var(--text-secondary)] mb-1">關鍵判斷</p>
+                <p className="text-xs text-[var(--text-secondary)] mb-1">{ui.aiKeyPoints}</p>
                 <ul className="space-y-0.5">
                   {aiResult.advice.keyPoints.map((k, i) => (
                     <li key={i} className="text-xs text-[var(--text-primary)]">• {k}</li>
@@ -1082,7 +1088,7 @@ export default function PortfolioPage() {
                 </ul>
               </div>
               <div className="mb-3">
-                <p className="text-xs text-[var(--text-secondary)] mb-1">主要風險</p>
+                <p className="text-xs text-[var(--text-secondary)] mb-1">{ui.aiRisks}</p>
                 <ul className="space-y-0.5">
                   {aiResult.advice.risks.map((r, i) => (
                     <li key={i} className="text-xs text-[var(--accent-red)]">• {r}</li>
@@ -1090,7 +1096,7 @@ export default function PortfolioPage() {
                 </ul>
               </div>
               <p className="text-sm bg-[var(--bg-secondary)] rounded-lg p-3 border border-white/5">{aiResult.advice.action}</p>
-              {aiResult.usedFallback && <p className="mt-2 text-[10px] text-[var(--text-secondary)]">本次分析使用了備援模型</p>}
+              {aiResult.usedFallback && <p className="mt-2 text-[10px] text-[var(--text-secondary)]">{ui.aiUsedFallback}</p>}
             </div>
           )}
         </div>
@@ -1098,34 +1104,32 @@ export default function PortfolioPage() {
         </>
       )}
 
-      {/* 摘要 */}
       {history.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
           <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-4">
-            <p className="text-xs text-[var(--text-secondary)]">持有標的</p>
+            <p className="text-xs text-[var(--text-secondary)]">{ui.summaryHoldings}</p>
             <p className="text-xl font-bold mt-1">{history.length}</p>
           </div>
           <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-4">
-            <p className="text-xs text-[var(--text-secondary)]">已含 AI 建議</p>
+            <p className="text-xs text-[var(--text-secondary)]">{ui.summaryWithAi}</p>
             <p className="text-xl font-bold mt-1">{history.filter(r => r.recommendation).length}</p>
           </div>
           <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-4">
-            <p className="text-xs text-[var(--text-secondary)]">台股未實現損益</p>
+            <p className="text-xs text-[var(--text-secondary)]">{ui.summaryTwPnl}</p>
             <p className={`text-lg font-bold mt-1 ${stats.tw.pnl >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>{formatMoney(stats.tw.pnl, 'tw')}</p>
           </div>
           <div className="bg-[var(--bg-card)] rounded-2xl border border-white/5 p-4">
-            <p className="text-xs text-[var(--text-secondary)]">美股未實現損益</p>
+            <p className="text-xs text-[var(--text-secondary)]">{ui.summaryUsPnl}</p>
             <p className={`text-lg font-bold mt-1 ${stats.us.pnl >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>{formatMoney(stats.us.pnl, 'us')}</p>
           </div>
         </div>
       )}
 
-      {/* 歷史紀錄 */}
       <div className="mt-10">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <History className="w-5 h-5 text-[var(--text-secondary)]" />
-            持股損益紀錄
+            {ui.historyTitle}
           </h2>
           {!showAdd && (
             <button
@@ -1134,13 +1138,13 @@ export default function PortfolioPage() {
               className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-sm hover:bg-white/15 transition"
             >
               <Plus className="w-4 h-4" />
-              新增
+              {ui.headerAdd}
             </button>
           )}
         </div>
         {history.length === 0 ? (
           <div className="bg-[var(--bg-card)] rounded-xl border border-white/5 p-8 text-center">
-            <p className="text-sm text-[var(--text-secondary)]">尚無任何損益紀錄。</p>
+            <p className="text-sm text-[var(--text-secondary)]">{ui.historyEmpty}</p>
             {!showAdd && (
               <button
                 type="button"
@@ -1148,7 +1152,7 @@ export default function PortfolioPage() {
                 className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition"
               >
                 <Plus className="w-4 h-4" />
-                新增第一筆持股
+                {ui.historyAddFirst}
               </button>
             )}
           </div>
@@ -1178,25 +1182,25 @@ export default function PortfolioPage() {
                   {open && (
                     <div className="px-4 pb-4 pt-1 border-t border-white/5">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm pt-3">
-                        <div><p className="text-xs text-[var(--text-secondary)]">持有股數</p><p>{item.shares}</p></div>
-                        <div><p className="text-xs text-[var(--text-secondary)]">每股成本</p><p>{formatMoney(item.cost, item.market)}</p></div>
-                        <div><p className="text-xs text-[var(--text-secondary)]">現價</p><p>{formatMoney(item.current_price, item.market)}</p></div>
-                        <div><p className="text-xs text-[var(--text-secondary)]">累計股息</p><p>{formatMoney(item.dividend, item.market)}</p></div>
-                        <div><p className="text-xs text-[var(--text-secondary)]">總成本</p><p>{formatMoney(item.cost_basis, item.market)}</p></div>
-                        <div><p className="text-xs text-[var(--text-secondary)]">市值</p><p>{formatMoney(item.market_value, item.market)}</p></div>
-                        <div className="text-[var(--accent-red)]"><p className="text-xs text-[var(--text-secondary)]">未實現損益</p><p>{formatMoney(item.unrealized_pnl, item.market)} ({formatPct(item.unrealized_pnl_pct)})</p></div>
-                        <div><p className="text-xs text-[var(--text-secondary)]">股息殖利率</p><p>{item.yield_on_cost.toFixed(2)}%</p></div>
+                        <div><p className="text-xs text-[var(--text-secondary)]">{ui.detailShares}</p><p>{item.shares}</p></div>
+                        <div><p className="text-xs text-[var(--text-secondary)]">{ui.detailCost}</p><p>{formatMoney(item.cost, item.market)}</p></div>
+                        <div><p className="text-xs text-[var(--text-secondary)]">{ui.detailPrice}</p><p>{formatMoney(item.current_price, item.market)}</p></div>
+                        <div><p className="text-xs text-[var(--text-secondary)]">{ui.detailDividend}</p><p>{formatMoney(item.dividend, item.market)}</p></div>
+                        <div><p className="text-xs text-[var(--text-secondary)]">{ui.detailTotalCost}</p><p>{formatMoney(item.cost_basis, item.market)}</p></div>
+                        <div><p className="text-xs text-[var(--text-secondary)]">{ui.detailMarketValue}</p><p>{formatMoney(item.market_value, item.market)}</p></div>
+                        <div className="text-[var(--accent-red)]"><p className="text-xs text-[var(--text-secondary)]">{ui.detailUnrealizedPnl}</p><p>{formatMoney(item.unrealized_pnl, item.market)} ({formatPct(item.unrealized_pnl_pct)})</p></div>
+                        <div><p className="text-xs text-[var(--text-secondary)]">{ui.detailYield}</p><p>{item.yield_on_cost.toFixed(2)}%</p></div>
                         <div className="col-span-2 md:col-span-4">
-                          <p className="text-xs text-[var(--text-secondary)]">建立時間</p>
+                          <p className="text-xs text-[var(--text-secondary)]">{ui.detailCreatedAt}</p>
                           <p className="text-xs">{(item.created_at || '').replace('T', ' ')}</p>
                         </div>
                         {item.summary && (
                           <div className="col-span-2 md:col-span-4">
-                            <p className="text-xs text-[var(--text-secondary)]">AI 摘要</p>
+                            <p className="text-xs text-[var(--text-secondary)]">{ui.detailAiSummary}</p>
                             <p className="text-sm">{item.summary}</p>
                           </div>
                         )}
-                        {item.report_json && <JsonAdviceView json={item.report_json} market={item.market} />}
+                        {item.report_json && <JsonAdviceView json={item.report_json} market={item.market} ui={ui} />}
                       </div>
                     </div>
                   )}
@@ -1210,7 +1214,7 @@ export default function PortfolioPage() {
   )
 }
 
-function JsonAdviceView({ json, market }: { json: string; market: Market }) {
+function JsonAdviceView({ json, market, ui }: { json: string; market: Market; ui: { detailKeyPoints: string; detailRisks: string; detailAction: string } }) {
   const [parsed, setParsed] = useState<{ advice?: Advice } | null>(null)
   useEffect(() => {
     try {
@@ -1222,19 +1226,19 @@ function JsonAdviceView({ json, market }: { json: string; market: Market }) {
   if (!parsed?.advice) return null
   return (
     <div className="col-span-2 md:col-span-4 rounded-lg bg-[var(--bg-secondary)] p-3 border border-white/5 space-y-2">
-      <p className="text-xs text-[var(--text-secondary)]">AI 關鍵判斷</p>
+      <p className="text-xs text-[var(--text-secondary)]">{ui.detailKeyPoints}</p>
       <ul className="space-y-0.5">
         {parsed.advice.keyPoints.map((k, i) => (
           <li key={i} className="text-xs">• {k}</li>
         ))}
       </ul>
-      <p className="text-xs text-[var(--accent-red)]">風險</p>
+      <p className="text-xs text-[var(--accent-red)]">{ui.detailRisks}</p>
       <ul className="space-y-0.5">
         {parsed.advice.risks.map((r, i) => (
           <li key={i} className="text-xs text-[var(--accent-red)]">• {r}</li>
         ))}
       </ul>
-      <p className="text-xs text-[var(--text-secondary)]">行動建議</p>
+      <p className="text-xs text-[var(--text-secondary)]">{ui.detailAction}</p>
       <p className="text-sm">{parsed.advice.action}</p>
     </div>
   )

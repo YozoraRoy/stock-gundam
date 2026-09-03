@@ -26,6 +26,7 @@ import {
   formatLastBuyDateWithYear,
   formatTradingDayWithWeekday,
 } from '@/utils/taiwan-calendar'
+import { useI18n } from '@/i18n/LanguageProvider'
 
 export interface OddLotItem {
   date: string
@@ -70,7 +71,6 @@ export function normalizePriceAndVolume(
   stockId?: string,
   currentPrice?: number | null
 ): { unitPrice: number | null; totalAmount: number | null; volume: number | null; isEstimated: boolean } {
-  // price 為 TWSE TWT53U 官方「每股成交價」直接原樣呈現，不做任何猜測/覆寫。
   if (price == null || isNaN(price) || price <= 0) {
     if (currentPrice != null && currentPrice > 0) {
       const vol = volume ?? 0
@@ -107,12 +107,13 @@ export function formatSingleSharePrice(
   price: number | null | undefined,
   volume: number | null | undefined,
   stockId?: string,
-  currentPrice?: number | null
+  currentPrice?: number | null,
+  ui?: { noTrade?: string; currency?: string }
 ): { text: string; isEstimated: boolean } {
   const norm = normalizePriceAndVolume(price, volume, stockId, currentPrice)
-  if (norm.unitPrice == null || norm.unitPrice <= 0) return { text: '未成交', isEstimated: false }
+  if (norm.unitPrice == null || norm.unitPrice <= 0) return { text: ui?.noTrade ?? '未成交', isEstimated: false }
   return {
-    text: `NT$ ${norm.unitPrice.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    text: `${ui?.currency ?? 'NT$'} ${norm.unitPrice.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     isEstimated: norm.isEstimated,
   }
 }
@@ -121,29 +122,34 @@ export function formatTotalAmount(
   price: number | null | undefined,
   volume?: number | null | undefined,
   stockId?: string,
-  currentPrice?: number | null
+  currentPrice?: number | null,
+  ui?: { currency?: string; yiUnit?: string; wanUnit?: string }
 ): string {
   const norm = normalizePriceAndVolume(price, volume, stockId, currentPrice)
   if (norm.totalAmount == null || norm.totalAmount <= 0) return '—'
+  const cur = ui?.currency ?? 'NT$'
   const total = norm.totalAmount
   if (total >= 100000000) {
     const yi = total / 100000000
-    return `NT$ ${yi.toLocaleString('zh-TW', { maximumFractionDigits: 2 })} 億`
+    return `${cur} ${yi.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}${ui?.yiUnit ?? ' 億'}`
   }
   if (total >= 10000) {
     const wan = total / 10000
-    return `NT$ ${wan.toLocaleString('zh-TW', { maximumFractionDigits: 1 })} 萬`
+    return `${cur} ${wan.toLocaleString('zh-TW', { maximumFractionDigits: 1 })}${ui?.wanUnit ?? ' 萬'}`
   }
-  return `NT$ ${Math.round(total).toLocaleString('zh-TW')}`
+  return `${cur} ${Math.round(total).toLocaleString('zh-TW')}`
 }
 
-export function formatVolume(vol: number | null | undefined): string {
-  if (vol == null || isNaN(vol)) return '0 股'
+export function formatVolume(
+  vol: number | null | undefined,
+  ui?: { zeroShares?: string; sharesUnit?: string; wanSharesUnit?: string }
+): string {
+  if (vol == null || isNaN(vol)) return ui?.zeroShares ?? '0 股'
   if (vol >= 10000) {
     const wan = vol / 10000
-    return `${wan.toLocaleString('zh-TW', { maximumFractionDigits: 1 })} 萬股`
+    return `${wan.toLocaleString('zh-TW', { maximumFractionDigits: 1 })}${ui?.wanSharesUnit ?? ' 萬股'}`
   }
-  return `${vol.toLocaleString('zh-TW')} 股`
+  return `${vol.toLocaleString('zh-TW')}${ui?.sharesUnit ?? ' 股'}`
 }
 
 export function estimateGiftValue(giftName?: string | null): number {
@@ -207,28 +213,32 @@ export function formatCpRatio(ratio: number): { label: string; badgeClass: strin
 
 export type RestrictionStatus = 'ALLOW_AGENT' | 'REQUIRE_EVOTE_OR_ATTEND' | 'NO_ODD_LOT_GIFT' | 'UNKNOWN'
 
-// MOPS 官方公告分類 → 領取限制。claimRule 來自公開資訊觀測站股東會召集公告。
-const OFFICIAL_RULE_MAP: Record<string, { status: RestrictionStatus; label: string; badgeClass: string }> = {
-  ONE_SHARE: {
-    status: 'ALLOW_AGENT',
-    label: '✅ 1股可領',
-    badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-  },
-  FULL_LOT: {
-    status: 'NO_ODD_LOT_GIFT',
-    label: '❌ 需滿千股',
-    badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
-  },
-  NO_GIFT: {
-    status: 'NO_ODD_LOT_GIFT',
-    label: '➖ 無紀念品',
-    badgeClass: 'bg-white/5 text-white/40 border-white/15',
-  },
-  MEETING_ONLY: {
-    status: 'REQUIRE_EVOTE_OR_ATTEND',
-    label: '⚠️ 需出席/電投',
-    badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  },
+function getOfficialRuleMap(ui: {
+  restrictOneShare: string; restrictFullLot: string;
+  restrictNoGift: string; restrictMeetingOnly: string;
+}): Record<string, { status: RestrictionStatus; label: string; badgeClass: string }> {
+  return {
+    ONE_SHARE: {
+      status: 'ALLOW_AGENT',
+      label: ui.restrictOneShare,
+      badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+    },
+    FULL_LOT: {
+      status: 'NO_ODD_LOT_GIFT',
+      label: ui.restrictFullLot,
+      badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+    },
+    NO_GIFT: {
+      status: 'NO_ODD_LOT_GIFT',
+      label: ui.restrictNoGift,
+      badgeClass: 'bg-white/5 text-white/40 border-white/15',
+    },
+    MEETING_ONLY: {
+      status: 'REQUIRE_EVOTE_OR_ATTEND',
+      label: ui.restrictMeetingOnly,
+      badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+    },
+  }
 }
 
 export function getOddLotRestriction(
@@ -236,6 +246,12 @@ export function getOddLotRestriction(
   distributionMethod?: string | null,
   claimRule?: string | null,
   claimRuleSource?: string | null,
+  ui?: {
+    restrictOneShare?: string; restrictFullLot?: string; restrictNoGift?: string;
+    restrictMeetingOnly?: string; restrictEvoteOrAttend?: string;
+    restrictOddLotNoGift?: string; restrictPending?: string;
+    restrictAgentClaimable?: string; sourceOfficial?: string; sourceEstimated?: string;
+  }
 ): {
   status: RestrictionStatus
   label: string
@@ -243,9 +259,15 @@ export function getOddLotRestriction(
   source: string
   officialText?: string | null
 } {
-  // 優先採用 MOPS 官方公告分類（僅在拿到非 UNKNOWN 的官方規則時）
-  if (claimRule && claimRuleSource === 'MOPS' && claimRule !== 'UNKNOWN' && OFFICIAL_RULE_MAP[claimRule]) {
-    const cfg = OFFICIAL_RULE_MAP[claimRule]
+  const ruleMap = getOfficialRuleMap({
+    restrictOneShare: ui?.restrictOneShare ?? '✅ 1股可領',
+    restrictFullLot: ui?.restrictFullLot ?? '❌ 需滿千股',
+    restrictNoGift: ui?.restrictNoGift ?? '➖ 無紀念品',
+    restrictMeetingOnly: ui?.restrictMeetingOnly ?? '⚠️ 需出席/電投',
+  })
+
+  if (claimRule && claimRuleSource === 'MOPS' && claimRule !== 'UNKNOWN' && ruleMap[claimRule]) {
+    const cfg = ruleMap[claimRule]
     return { ...cfg, source: 'MOPS' }
   }
 
@@ -254,7 +276,7 @@ export function getOddLotRestriction(
   if (text.includes('親領') || text.includes('電子投票') || text.includes('電投') || text.includes('出席')) {
     return {
       status: 'REQUIRE_EVOTE_OR_ATTEND',
-      label: '⚠️ 需電投/親領',
+      label: ui?.restrictEvoteOrAttend ?? '⚠️ 需電投/親領',
       badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
       source: '推估',
     }
@@ -262,7 +284,7 @@ export function getOddLotRestriction(
   if (text.includes('不發') || text.includes('滿一張')) {
     return {
       status: 'NO_ODD_LOT_GIFT',
-      label: '❌ 零股不發放',
+      label: ui?.restrictOddLotNoGift ?? '❌ 零股不發放',
       badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
       source: '推估',
     }
@@ -270,7 +292,7 @@ export function getOddLotRestriction(
   if (!giftName || giftName === '-' || giftName === '待公告' || classifyGift(giftName) === 'NO_GIFT') {
     return {
       status: 'UNKNOWN',
-      label: '⏳ 待公告',
+      label: ui?.restrictPending ?? '⏳ 待公告',
       badgeClass: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
       source: '推估',
     }
@@ -278,7 +300,7 @@ export function getOddLotRestriction(
 
   return {
     status: 'ALLOW_AGENT',
-    label: '✅ 零股可代領',
+    label: ui?.restrictAgentClaimable ?? '✅ 零股可代領',
     badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
     source: '推估',
   }
@@ -291,7 +313,6 @@ export function classifyGift(giftName?: string | null): GiftCategory {
   if (name.includes('待') || name.includes('未') || name.includes('尚未')) {
     return 'PENDING'
   }
-  // 優先判定 eGift / 電子卡 / 電子禮券 / 電子抵用券
   if (
     name.includes('egift') ||
     name.includes('e-gift') ||
@@ -374,19 +395,22 @@ export function classifyGift(giftName?: string | null): GiftCategory {
   return 'OTHER'
 }
 
-export const CATEGORY_CONFIG: Record<
-  GiftCategory,
-  { label: string; icon: string; badgeClass: string }
-> = {
-  ALL:      { label: '全部',          icon: '✨', badgeClass: 'bg-white/10 text-white border-white/20' },
-  EGIFT:    { label: 'eGift 電子禮卡', icon: '📱', badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30 font-bold' },
-  CARD:     { label: '超商禮券卡',     icon: '💳', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
-  KITCHEN:  { label: '居家餐廚',      icon: '🥣', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
-  CARE:     { label: '清潔護理',      icon: '🧴', badgeClass: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
-  LIFESTYLE:{ label: '3C與生活',     icon: '🔌', badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
-  PENDING:  { label: '待公告',        icon: '⏳', badgeClass: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
-  NO_GIFT:  { label: '無紀念品',      icon: '➖', badgeClass: 'bg-white/5 text-white/40 border-white/10' },
-  OTHER:    { label: '其他商品',      icon: '🎁', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
+export function getCategoryConfig(ui: {
+  categoryAll: string; categoryEgift: string; categoryCard: string;
+  categoryKitchen: string; categoryCare: string; categoryLifestyle: string;
+  categoryPending: string; categoryNoGift: string; categoryOther: string;
+}): Record<GiftCategory, { label: string; icon: string; badgeClass: string }> {
+  return {
+    ALL:      { label: ui.categoryAll,       icon: '✨', badgeClass: 'bg-white/10 text-white border-white/20' },
+    EGIFT:    { label: ui.categoryEgift,     icon: '📱', badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30 font-bold' },
+    CARD:     { label: ui.categoryCard,      icon: '💳', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+    KITCHEN:  { label: ui.categoryKitchen,   icon: '🥣', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    CARE:     { label: ui.categoryCare,      icon: '🧴', badgeClass: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
+    LIFESTYLE:{ label: ui.categoryLifestyle, icon: '🔌', badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
+    PENDING:  { label: ui.categoryPending,   icon: '⏳', badgeClass: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
+    NO_GIFT:  { label: ui.categoryNoGift,    icon: '➖', badgeClass: 'bg-white/5 text-white/40 border-white/10' },
+    OTHER:    { label: ui.categoryOther,     icon: '🎁', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
+  }
 }
 
 const PAGE_SIZE = 100
@@ -398,20 +422,21 @@ interface OddLotViewProps {
 }
 
 export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddLotViewProps) {
+  const { dict } = useI18n()
+  const ui = dict.oddLot
+
   const [selectedCategory, setSelectedCategory] = useState<GiftCategory>('ALL')
   const [searchQuery, setSearchQuery] = useState(initialQuery)
   const [page, setPage] = useState(1)
 
-  // 排序與過濾狀態
   const [sortField, setSortField] = useState<SortField>('default')
   const [sortOrder, setSortOrder] = useState<SortOrder>('none')
   const [showAiTooltip, setShowAiTooltip] = useState(false)
-  const [hideNoGift, setHideNoGift] = useState(true)   // 預設隱藏無紀念品股票
-  const [onlyAllowAgent, setOnlyAllowAgent] = useState(false) // 僅顯示1股可代領
-  const [onlyHighCp, setOnlyHighCp] = useState(false)   // 僅顯示高 CP 值 (回報 > 100%)
-  const [hideExpired, setHideExpired] = useState(true)   // 預設隱藏已過最後買進日
+  const [hideNoGift, setHideNoGift] = useState(true)
+  const [onlyAllowAgent, setOnlyAllowAgent] = useState(false)
+  const [onlyHighCp, setOnlyHighCp] = useState(false)
+  const [hideExpired, setHideExpired] = useState(true)
 
-  // 手動更新 TWSE 資料狀態
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -428,22 +453,21 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
       }
       if (json.success) {
         if (json.throttled) {
-          setRefreshMsg({ type: 'error', text: '剛剛才更新過，請稍後幾分鐘再試（避免重複抓取）' })
+          setRefreshMsg({ type: 'error', text: ui.refreshThrottled })
         } else {
-          setRefreshMsg({ type: 'success', text: `已更新 ${json.oddLotCount} 筆零股 + ${json.giftCount} 筆紀念品，重新整理頁面...` })
+          setRefreshMsg({ type: 'success', text: ui.refreshSuccess.replace('{oddLotCount}', String(json.oddLotCount)).replace('{giftCount}', String(json.giftCount)) })
           setTimeout(() => window.location.reload(), 1200)
         }
       } else {
-        setRefreshMsg({ type: 'error', text: json.error || '更新失敗' })
+        setRefreshMsg({ type: 'error', text: json.error || ui.refreshFailed })
       }
-    } catch (e) {
-      setRefreshMsg({ type: 'error', text: '網路錯誤，請稍後再試' })
+    } catch {
+      setRefreshMsg({ type: 'error', text: ui.refreshNetworkError })
     } finally {
       setRefreshing(false)
     }
   }
 
-  // 近 5 年股東會紀念品歷史 Modal 狀態
   const [historyModalStock, setHistoryModalStock] = useState<{ stock_id: string; stock_name: string } | null>(null)
   const [historyData, setHistoryData] = useState<{ year: number; gift_name: string }[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -464,16 +488,15 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
     }
   }
 
-  // 1. 提取彙總 (合計) 資料，不進入個股列表
+  const categoryConfig = useMemo(() => getCategoryConfig(ui), [ui])
+
   const summaryItem = useMemo(() => {
     return initialItems.find(item => item.stock_name === '合計' || item.stock_id === '' || item.stock_id === '-')
   }, [initialItems])
 
-  // 2. 去重並過濾掉「合計」資料列
   const dedupedItems = useMemo(() => {
     const seen = new Set<string>()
     return initialItems.filter(item => {
-      // 排除「合計」或無代號列
       if (item.stock_name === '合計' || !item.stock_id || item.stock_id === '-') return false
 
       const key = `${item.date}-${item.stock_id}`
@@ -483,7 +506,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
     })
   }, [initialItems])
 
-  // 各分類數量計算（使用去重後的資料）
   const categoryCounts = useMemo(() => {
     const counts: Record<GiftCategory, number> = {
       ALL: dedupedItems.length,
@@ -496,10 +518,8 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
     return counts
   }, [dedupedItems])
 
-  // 判斷最後買進日是否已過期（若最後買進日逢週末或國定假日，自動推算至前一個開市交易日）
-  // 若提供 meeting_date，優先使用股東會日期判斷年份
   const isLastBuyDateExpired = (lastBuyDate: string | null | undefined, meetingDate?: string | null): boolean => {
-    if (!lastBuyDate) return false // 無日期不過濾
+    if (!lastBuyDate) return false
     const match = lastBuyDate.match(/^(\d{1,2})\/(\d{1,2})$/)
     if (!match) return false
 
@@ -509,7 +529,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
     const month = parseInt(match[1], 10)
     const day = parseInt(match[2], 10)
 
-    // 推斷年份：優先使用 meeting_date
     let year = currentYear
     if (meetingDate) {
       const meetingFull = meetingDate.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/)
@@ -527,7 +546,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
         }
       }
     } else {
-      // 無 meeting_date 時使用跨年邏輯
       if (currentMonth >= 11 && month <= 4) {
         year = currentYear + 1
       }
@@ -535,7 +553,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
 
     let buyDate = new Date(year, month - 1, day)
 
-    // 若最後買進日逢週末或國定休市日，往前自動推算至最後可買進之開市上班日
     if (!isTaiwanMarketTradingDay(buyDate)) {
       buyDate = getLastMarketTradingDay(buyDate)
     }
@@ -544,38 +561,31 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
     return buyDate < today
   }
 
-  // 套用篩選（無紀念品開關 + 可代領開關 + 高CP開關 + 分類 + 搜尋）
   const filteredItems = useMemo(() => {
     return dedupedItems.filter(item => {
       const cat = classifyGift(item.gift_name)
 
-      // 隱藏已過最後買進日
       if (hideExpired && isLastBuyDateExpired(item.last_buy_date, item.meeting_date)) {
         return false
       }
 
-      // 當開啟「隱藏無紀念品」且選「全部」分類時，自動過濾無紀念品項目
       if (hideNoGift && selectedCategory === 'ALL' && cat === 'NO_GIFT') {
         return false
       }
 
-      // 僅顯示零股可代領
       if (onlyAllowAgent) {
         const rest = getOddLotRestriction(item.gift_name, item.distribution_method, item.claim_rule, item.claim_rule_source)
         if (rest.status !== 'ALLOW_AGENT') return false
       }
 
-      // 僅顯示高 CP 值 (投報比 >= 1.0)
       if (onlyHighCp) {
         const cp = calculateCpRatio(item.price, item.gift_name, item.volume, item.current_price)
         if (cp < 1.0) return false
       }
 
-      // 分類過濾
       if (selectedCategory !== 'ALL') {
         if (cat !== selectedCategory) return false
       }
-      // 搜尋文字過濾
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase()
         const matchId = item.stock_id.toLowerCase().includes(q)
@@ -587,7 +597,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
     })
   }, [dedupedItems, hideNoGift, hideExpired, onlyAllowAgent, onlyHighCp, selectedCategory, searchQuery])
 
-  // 套用排序
   const sortedItems = useMemo(() => {
     if (sortField === 'default' || sortOrder === 'none') {
       return filteredItems
@@ -642,7 +651,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
     return items
   }, [filteredItems, sortField, sortOrder])
 
-  // 排序標題切換處理
   const handleSort = (field: SortField) => {
     if (sortField !== field) {
       setSortField(field)
@@ -659,7 +667,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
     setPage(1)
   }
 
-  // 換頁時重置 page
   const handleCategoryChange = (cat: GiftCategory) => {
     setSelectedCategory(cat)
     setPage(1)
@@ -701,7 +708,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
 
   return (
     <div className="space-y-6">
-      {/* 📊 市場整體零股交易合計面板 (固定置頂，不隨表格排序或操作) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-[var(--bg-card)] border border-white/10 rounded-2xl p-4 flex items-center gap-3.5">
           <div className="p-3 rounded-xl bg-[var(--accent)]/10 text-[var(--accent)] shrink-0">
@@ -709,12 +715,12 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
           </div>
           <div>
             <div className="text-xs text-[var(--text-secondary)] mb-0.5">
-              最新盤後交易日 {latestDate ? `(${formatTradingDayWithWeekday(latestDate)})` : ''} 盤後零股成交總金額
+              {ui.statsLatestDay} {latestDate ? `(${formatTradingDayWithWeekday(latestDate)})` : ''} {ui.statsTotalOddLotAmount}
             </div>
             <div className="text-base md:text-lg font-mono font-bold text-white">
               {(() => {
                 const totalAmt = dedupedItems.reduce((acc, item) => acc + (item.price ?? 0) * (item.volume ?? 0), 0)
-                return totalAmt > 0 ? formatTotalAmount(totalAmt, 1) : (summaryItem ? formatTotalAmount(summaryItem.price, summaryItem.volume) : '—')
+                return totalAmt > 0 ? formatTotalAmount(totalAmt, 1, undefined, undefined, ui) : (summaryItem ? formatTotalAmount(summaryItem.price, summaryItem.volume, undefined, undefined, ui) : '—')
               })()}
             </div>
           </div>
@@ -726,12 +732,12 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
           </div>
           <div>
             <div className="text-xs text-[var(--text-secondary)] mb-0.5">
-              最新盤後交易日 {latestDate ? `(${formatTradingDayWithWeekday(latestDate)})` : ''} 盤後零股成交總股數
+              {ui.statsLatestDay} {latestDate ? `(${formatTradingDayWithWeekday(latestDate)})` : ''} {ui.statsTotalOddLotVolume}
             </div>
             <div className="text-base md:text-lg font-mono font-bold text-white">
               {(() => {
                 const totalVol = dedupedItems.reduce((acc, item) => acc + (item.volume ?? 0), 0)
-                return totalVol > 0 ? formatVolume(totalVol) : (summaryItem ? formatVolume(summaryItem.volume) : '—')
+                return totalVol > 0 ? formatVolume(totalVol, ui) : (summaryItem ? formatVolume(summaryItem.volume, ui) : '—')
               })()}
             </div>
           </div>
@@ -742,15 +748,14 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
             <Gift className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs text-[var(--text-secondary)] mb-0.5">零股交易標的總數</div>
+            <div className="text-xs text-[var(--text-secondary)] mb-0.5">{ui.statsTotalStocks}</div>
             <div className="text-base md:text-lg font-mono font-bold text-white">
-              {dedupedItems.length.toLocaleString()} 檔股票
+              {ui.stocksCount.replace('{n}', dedupedItems.length.toLocaleString())}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 搜尋與過濾區塊 */}
       <div className="bg-[var(--bg-card)] border border-white/5 rounded-2xl p-4 md:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="relative flex-1">
@@ -759,12 +764,11 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
               type="text"
               value={searchQuery}
               onChange={e => handleSearchChange(e.target.value)}
-              placeholder="搜尋股票代號、名稱、或紀念品關鍵字 (例如 2330 / 禮卡 / 保鮮盒)..."
+              placeholder={ui.searchPlaceholder}
               className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)] transition"
             />
           </div>
 
-          {/* ⚡ 快捷開關區塊 (隱藏無紀念品 / 1股可代領 / 高CP值) */}
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
@@ -785,7 +789,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
               >
                 {hideNoGift && <span className="w-1 h-1 rounded-full bg-slate-950" />}
               </span>
-              <span>隱藏無紀念品 (預設)</span>
+              <span>{ui.toggleHideNoGift}</span>
             </button>
 
             <button
@@ -807,7 +811,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
               >
                 {onlyAllowAgent && <span className="w-1 h-1 rounded-full bg-slate-950" />}
               </span>
-              <span>✅ 僅 1 股可代領</span>
+              <span>{ui.toggleOnlyAllowAgent}</span>
             </button>
 
             <button
@@ -829,7 +833,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
               >
                 {onlyHighCp && <span className="w-1 h-1 rounded-full bg-slate-950" />}
               </span>
-              <span>🔥 高 CP 值 (投報 &gt; 100%)</span>
+              <span>{ui.toggleOnlyHighCp}</span>
             </button>
 
             <button
@@ -851,7 +855,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
               >
                 {hideExpired && <span className="w-1 h-1 rounded-full bg-slate-950" />}
               </span>
-              <span>📅 隱藏已截止 (預設)</span>
+              <span>{ui.toggleHideExpired}</span>
             </button>
 
             <button
@@ -865,7 +869,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
               }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>{refreshing ? '更新中...' : '手動更新'}</span>
+              <span>{refreshing ? ui.refreshing : ui.manualRefresh}</span>
             </button>
           </div>
 
@@ -882,15 +886,14 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
           )}
         </div>
 
-        {/* 🎁 紀念品分類頁籤 (Filter Pills) */}
         <div>
           <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] mb-2.5 font-medium">
             <Filter className="w-3.5 h-3.5 text-[var(--accent)]" />
-            <span>股東會紀念品類別篩選：</span>
+            <span>{ui.filterLabel}</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(Object.keys(CATEGORY_CONFIG) as GiftCategory[]).map(catKey => {
-              const cfg = CATEGORY_CONFIG[catKey]
+            {(Object.keys(categoryConfig) as GiftCategory[]).map(catKey => {
+              const cfg = categoryConfig[catKey]
               const isSelected = selectedCategory === catKey
               const count = categoryCounts[catKey] || 0
 
@@ -920,53 +923,54 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
         </div>
       </div>
 
-      {/* 資料表格列表 */}
       {filteredItems.length === 0 ? (
         <div className="bg-[var(--bg-card)] border border-white/5 rounded-2xl p-12 text-center text-sm text-[var(--text-secondary)]">
           <Gift className="w-8 h-8 text-[var(--text-secondary)] mx-auto mb-3 opacity-50" />
-          <p className="font-medium text-base text-white mb-1">未找到符合條件的零股或紀念品資料</p>
+          <p className="font-medium text-base text-white mb-1">{ui.emptyTitle}</p>
           <p className="text-xs">
             {hideNoGift || onlyAllowAgent || onlyHighCp
-              ? '目前已套用過濾條件 (無紀念品/代領限制/高CP值)，可點擊上方開關顯示全部。'
-              : '請嘗試調整搜尋關鍵字或切換紀念品分類頁籤。'}
+              ? ui.emptyFilteredHint
+              : ui.emptySearchHint}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {/* 統計與分頁資訊 */}
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] px-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span>
-                共 <span className="text-white font-semibold">{filteredItems.length}</span> 筆
+                {ui.totalRecords.replace('{n}', filteredItems.length.toLocaleString())}
               </span>
               {hideNoGift && selectedCategory === 'ALL' && (
                 <span className="text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
-                  已隱藏無紀念品股票
+                  {ui.statusHiddenNoGift}
                 </span>
               )}
               {onlyAllowAgent && (
                 <span className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-                  僅看零股可代領
+                  {ui.statusOnlyAgentClaimable}
                 </span>
               )}
               {onlyHighCp && (
                 <span className="text-[11px] text-rose-300 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-md">
-                  高 CP 值 (回報率 &gt; 100%)
+                  {ui.statusOnlyHighCp}
                 </span>
               )}
               {hideExpired && (
                 <span className="text-[11px] text-sky-300 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
-                  📅 已隱藏截止過期標的
+                  {ui.statusHiddenExpired}
                 </span>
               )}
               {selectedCategory !== 'ALL' && (
                 <span className="text-[11px] text-[var(--accent)] bg-[var(--accent)]/10 border border-[var(--accent)]/20 px-2 py-0.5 rounded-md">
-                  已套用分類篩選
+                  {ui.statusFilteredByCategory}
                 </span>
               )}
             </div>
             <span>
-              第 <span className="text-white font-semibold">{page}</span> / <span className="text-white font-semibold">{totalPages}</span> 頁，每頁 {PAGE_SIZE} 筆
+              {ui.pageInfo
+                .replace('{page}', String(page))
+                .replace('{totalPages}', String(totalPages))
+                .replace('{pageSize}', String(PAGE_SIZE))}
             </span>
           </div>
 
@@ -974,28 +978,26 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
             <table className="min-w-max w-full text-sm text-left">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.02] text-xs text-[var(--text-secondary)]">
-                  {/* # 點擊恢復預設排序 */}
                   <th
                     onClick={() => handleSort('default')}
                     className="px-4 py-3.5 font-semibold cursor-pointer hover:text-white transition-colors"
-                    title="點擊恢復預設排序"
+                    title={ui.resetSortTitle}
                   >
                     #
                   </th>
-                  {renderSortHeader('股票標的', 'stock')}
-                  {renderSortHeader('🎁 股東會紀念品', 'gift')}
-                  {renderSortHeader('分類', 'category')}
-                  {renderSortHeader('🎫 1股領取限制', 'restriction')}
-                  {renderSortHeader('⏳ 最後買進日', 'last_buy_date')}
-                  {renderSortHeader('💵 1股成交價', 'unit_price', true)}
-                  {renderSortHeader('💎 價值評分 (CP值)', 'cp_ratio', true)}
-                  {renderSortHeader('💰 成交總金額', 'total_amount', true)}
-                  {renderSortHeader('零股成交量', 'volume', true)}
+                  {renderSortHeader(ui.colStock, 'stock')}
+                  {renderSortHeader(ui.colGift, 'gift')}
+                  {renderSortHeader(ui.colCategory, 'category')}
+                  {renderSortHeader(ui.colRestriction, 'restriction')}
+                  {renderSortHeader(ui.colLastBuyDate, 'last_buy_date')}
+                  {renderSortHeader(ui.colUnitPrice, 'unit_price', true)}
+                  {renderSortHeader(ui.colCpRatio, 'cp_ratio', true)}
+                  {renderSortHeader(ui.colTotalAmount, 'total_amount', true)}
+                  {renderSortHeader(ui.colVolume, 'volume', true)}
 
-                  {/* AI 評估標題帶有小問號 Tooltip */}
                   <th className="px-4 py-3.5 font-semibold text-center relative">
                     <div className="inline-flex items-center justify-center gap-1.5">
-                      <span>AI 評估</span>
+                      <span>{ui.colAiEstimate}</span>
                       <div
                         className="relative flex items-center"
                         onMouseEnter={() => setShowAiTooltip(true)}
@@ -1007,13 +1009,13 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                         {showAiTooltip && (
                           <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900/95 backdrop-blur-md border border-white/20 p-3 rounded-xl shadow-2xl text-left z-50 pointer-events-none">
                             <div className="text-xs font-bold text-white mb-1 flex items-center gap-1">
-                              <span>🤖 AI 多維度投資與效益評估</span>
+                              <span>{ui.aiTooltipTitle}</span>
                             </div>
                             <p className="text-[11px] text-white/80 leading-relaxed">
-                              由 8 大專屬 AI Agent 結合這支股票的「技術面趨勢」、「零股成交流動性」及「股東會紀念品市場價值」進行綜合評估。
+                              {ui.aiTooltipDesc}
                             </p>
                             <div className="mt-1.5 pt-1.5 border-t border-white/10 text-[10px] text-[var(--accent)]">
-                              點擊「AI 分析」按鈕可查看該股票專屬紀錄與完整報告
+                              {ui.aiTooltipHint}
                             </div>
                           </div>
                         )}
@@ -1026,22 +1028,20 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                 {pagedItems.map((item, idx) => {
                   const giftName = item.gift_name && item.gift_name !== 'null' ? item.gift_name : null
                   const categoryKey = classifyGift(giftName)
-                  const catConfig = CATEGORY_CONFIG[categoryKey]
+                  const catConfig = categoryConfig[categoryKey]
                   const rowNum = (page - 1) * PAGE_SIZE + idx + 1
 
                   return (
                     <tr key={`${item.date}-${item.stock_id}-${idx}`} className="hover:bg-white/[0.03] transition-colors">
-                      {/* 序號 */}
                       <td className="px-4 py-3.5 text-xs text-white/30 font-mono">{rowNum}</td>
 
-                      {/* 股票名稱與代號（連至 Yahoo 股市台股個股行情頁面） */}
                       <td className="px-4 py-3.5">
                         <a
                           href={`https://tw.stock.yahoo.com/quote/${item.stock_id}.TW`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 group transition"
-                          title={`前往 Yahoo 股市檢視 ${item.stock_name} (${item.stock_id}) 即時與盤後詳細行情`}
+                          title={ui.yahooLinkTitle.replace('{name}', item.stock_name).replace('{id}', item.stock_id)}
                         >
                           <span className="font-bold text-white text-base group-hover:text-[var(--accent)] group-hover:underline transition-colors">
                             {item.stock_name}
@@ -1053,7 +1053,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                         </a>
                       </td>
 
-                      {/* 🎁 紀念品名稱 + 近 5 年歷史小 Icon 連結 */}
                       <td className="px-4 py-3.5">
                         {giftName ? (
                           <div className="flex items-center justify-between gap-2">
@@ -1063,11 +1062,11 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                             </div>
                             <button
                               onClick={() => openHistoryModal(item.stock_id, item.stock_name)}
-                              title="點擊檢視近 5 年發放紀念品歷史"
+                              title={ui.giftHistoryTitle}
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/20 transition-all shrink-0 cursor-pointer"
                             >
                               <History className="w-3 h-3 text-indigo-400" />
-                              <span>近5年</span>
+                              <span>{ui.last5Years}</span>
                             </button>
                           </div>
                         ) : (
@@ -1075,14 +1074,12 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                         )}
                       </td>
 
-                      {/* 分類徽章 */}
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${catConfig.badgeClass}`}>
                           {catConfig.icon} {catConfig.label}
                         </span>
                       </td>
 
-                      {/* 🎫 1股領取限制 */}
                       <td className="px-4 py-3.5 whitespace-nowrap text-xs">
                         {(() => {
                           const { label, badgeClass, source, officialText } = getOddLotRestriction(
@@ -1090,11 +1087,12 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                             item.distribution_method,
                             item.claim_rule,
                             item.claim_rule_source,
+                            ui,
                           )
                           const tip =
                             source === 'MOPS'
-                              ? `來源：MOPS 官方股東會公告${officialText ? `\n${officialText}` : ''}`
-                              : '來源：依紀念品文字推估，請以官方公告為準'
+                              ? `${ui.sourceMopsTip}${officialText ? `\n${officialText}` : ''}`
+                              : ui.sourceEstimateTip
                           return (
                             <span
                               title={tip}
@@ -1102,14 +1100,13 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                             >
                               {label}
                               <span className="ml-1 opacity-70 text-[10px]">
-                                {source === 'MOPS' ? '官方' : '估'}
+                                {source === 'MOPS' ? ui.sourceOfficial : ui.sourceEstimated}
                               </span>
                             </span>
                           )
                         })()}
                       </td>
 
-                      {/* ⏳ 最後買進日 (包含年份與跨年標示) */}
                       <td className="px-4 py-3.5 whitespace-nowrap text-xs text-[var(--text-secondary)]">
                         {(() => {
                           const dateInfo = formatLastBuyDateWithYear(item.last_buy_date, item.meeting_date)
@@ -1122,7 +1119,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                               </span>
                               {dateInfo.isCrossYear && (
                                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                  跨年
+                                  {ui.crossYear}
                                 </span>
                               )}
                             </div>
@@ -1130,17 +1127,16 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                         })()}
                       </td>
 
-                      {/* 💵 1股成交價 */}
                       <td className="px-4 py-3.5 text-right font-mono font-bold whitespace-nowrap">
                         {(() => {
-                          const { text, isEstimated } = formatSingleSharePrice(item.price, item.volume, item.stock_id, item.current_price)
-                          if (text === '未成交') return <span className="text-white/40">未成交</span>
+                          const { text, isEstimated } = formatSingleSharePrice(item.price, item.volume, item.stock_id, item.current_price, ui)
+                          if (text === ui.noTrade) return <span className="text-white/40">{ui.noTrade}</span>
                           return (
                             <span className={isEstimated ? 'text-cyan-400' : 'text-emerald-400'}>
                               {text}
                               {isEstimated && (
-                                <span className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30" title="無零股成交，以即時股價推估">
-                                  估
+                                <span className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30" title={ui.estimatedTip}>
+                                  {ui.estimated}
                                 </span>
                               )}
                             </span>
@@ -1148,7 +1144,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                         })()}
                       </td>
 
-                      {/* 💎 價值評分 (CP值) */}
                       <td className="px-4 py-3.5 text-right whitespace-nowrap font-mono text-xs">
                         {(() => {
                           const cpRatio = calculateCpRatio(item.price, giftName, item.volume, item.current_price)
@@ -1161,23 +1156,20 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                         })()}
                       </td>
 
-                      {/* 💰 成交總金額 */}
                       <td className="px-4 py-3.5 text-right font-mono text-xs text-white/80 whitespace-nowrap">
-                        {formatTotalAmount(item.price, item.volume, item.stock_id, item.current_price)}
+                        {formatTotalAmount(item.price, item.volume, item.stock_id, item.current_price, ui)}
                       </td>
 
-                      {/* 零股成交量 */}
                       <td className="px-4 py-3.5 text-right font-mono text-xs text-[var(--text-secondary)] whitespace-nowrap">
-                        {formatVolume(item.volume)}
+                        {formatVolume(item.volume, ui)}
                       </td>
 
-                      {/* AI 評估跳轉按鈕 */}
                       <td className="px-4 py-3.5 text-center whitespace-nowrap">
                         <a
                           href={`/analyze?symbol=${item.stock_id}.TW`}
                           className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/30 hover:bg-[var(--accent)] hover:text-white transition"
                         >
-                          <span>AI 分析</span>
+                          <span>{ui.aiAnalysis}</span>
                           <ChevronRight className="w-3 h-3" />
                         </a>
                       </td>
@@ -1188,7 +1180,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
             </table>
           </div>
 
-          {/* 分頁控制列 */}
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 py-2">
               <button
@@ -1197,10 +1188,9 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-white/10 bg-white/5 text-[var(--text-secondary)] hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition"
               >
                 <ChevronLeftIcon className="w-3.5 h-3.5" />
-                上一頁
+                {ui.prevPage}
               </button>
 
-              {/* 頁碼 */}
               <div className="flex items-center gap-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                   .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
@@ -1233,24 +1223,27 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                 disabled={page === totalPages}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-white/10 bg-white/5 text-[var(--text-secondary)] hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition"
               >
-                下一頁
+                {ui.nextPage}
                 <ChevronRightIcon className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
 
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] px-2">
-            <span>顯示第 {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredItems.length)} 筆（共 {filteredItems.length} 筆）</span>
-            <span>資料來源：TWSE 盤後零股交易市場 &amp; 股東會紀念品庫</span>
+            <span>
+              {ui.displayRange
+                .replace('{from}', String((page - 1) * PAGE_SIZE + 1))
+                .replace('{to}', String(Math.min(page * PAGE_SIZE, filteredItems.length)))
+                .replace('{total}', String(filteredItems.length))}
+            </span>
+            <span>{ui.dataSource}</span>
           </div>
         </div>
       )}
 
-      {/* 📜 近 5 年股東會紀念品歷史 Modal 彈窗 */}
       {historyModalStock && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
           <div className="bg-[var(--bg-card)] border border-white/20 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5 relative">
-            {/* 關閉按鈕 */}
             <button
               onClick={() => setHistoryModalStock(null)}
               className="absolute top-4 right-4 p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
@@ -1258,7 +1251,6 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
               <X className="w-5 h-5" />
             </button>
 
-            {/* 標頭 */}
             <div className="flex items-center gap-3 pr-8">
               <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-400 shrink-0">
                 <History className="w-6 h-6" />
@@ -1267,26 +1259,25 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                 <h3 className="text-lg font-bold text-white">
                   {historyModalStock.stock_name} ({historyModalStock.stock_id})
                 </h3>
-                <p className="text-xs text-[var(--text-secondary)]">近 5 年股東會紀念品發放歷程紀錄</p>
+                <p className="text-xs text-[var(--text-secondary)]">{ui.historyModalSubtitle}</p>
               </div>
             </div>
 
-            {/* 歷史時間軸內容 */}
             {loadingHistory ? (
               <div className="py-8 text-center text-white/50 space-y-2">
                 <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-xs">載入歷史紀錄中...</p>
+                <p className="text-xs">{ui.historyLoading}</p>
               </div>
             ) : (
               <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
                 {historyData.map((h) => {
                   const cat = classifyGift(h.gift_name)
-                  const config = CATEGORY_CONFIG[cat]
+                  const config = categoryConfig[cat]
                   return (
                     <div key={h.year} className="flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/10 hover:border-indigo-500/30 transition-all">
                       <div className="flex items-center gap-3">
                         <span className="font-mono font-bold text-sm text-indigo-300 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
-                          {h.year} 年
+                          {h.year}{ui.historyYearSuffix ? ` ${ui.historyYearSuffix}` : ''}
                         </span>
                         <span className="font-medium text-white text-sm">{h.gift_name}</span>
                       </div>
@@ -1299,13 +1290,12 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
               </div>
             )}
 
-            {/* 底部關閉按鈕 */}
             <div className="pt-2">
               <button
                 onClick={() => setHistoryModalStock(null)}
                 className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition-all cursor-pointer text-center"
               >
-                關閉
+                {ui.historyClose}
               </button>
             </div>
           </div>

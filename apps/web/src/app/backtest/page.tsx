@@ -13,6 +13,8 @@ import {
 } from 'recharts'
 import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Activity, ListOrdered, X, Zap } from 'lucide-react'
 import { searchStocks, StockCandidateList, type StockCandidate } from '@/components/stock-search'
+import { useI18n } from '@/i18n/LanguageProvider'
+import type { Dict } from '@/i18n/dictionaries'
 
 interface SeriesPoint {
   date: number
@@ -92,9 +94,9 @@ function fmtPct(v: number | null): string {
   return `${(v * 100).toFixed(1)}%`
 }
 
-function fmtDays(v: number | null): string {
+function fmtDays(v: number | null, unitStr: string): string {
   if (v == null) return '—'
-  return `${v.toFixed(1)} 天`
+  return unitStr.replace('{n}', v.toFixed(1))
 }
 
 function formatDate(ts: number): string {
@@ -112,9 +114,9 @@ function fmtPriceRange(trades: Trade[]): string {
 }
 
 /** 成交量格式化：億/萬。 */
-function fmtVolume(v: number): string {
-  if (v >= 1e8) return `${(v / 1e8).toFixed(2)} 億`
-  if (v >= 1e4) return `${(v / 1e4).toFixed(1)} 萬`
+function fmtVolume(v: number, billionStr: string, tenThousandStr: string): string {
+  if (v >= 1e8) return billionStr.replace('{n}', (v / 1e8).toFixed(2))
+  if (v >= 1e4) return tenThousandStr.replace('{n}', (v / 1e4).toFixed(1))
   return `${Math.round(v)}`
 }
 
@@ -141,12 +143,13 @@ function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
   )
 }
 
-function OutcomeBadge({ outcome }: { outcome: Trade['outcome'] }) {
+function OutcomeBadge({ outcome, dict }: { outcome: Trade['outcome']; dict: Dict }) {
+  const ui = dict.backtest
   if (outcome === 'win') {
-    return <span className="text-[var(--accent-green)] font-medium">勝</span>
+    return <span className="text-[var(--accent-green)] font-medium">{ui.outcomeWin}</span>
   }
-  if (outcome === 'loss') return <span className="text-[var(--accent-red)] font-medium">敗</span>
-  return <span className="text-[var(--text-secondary)]">平</span>
+  if (outcome === 'loss') return <span className="text-[var(--accent-red)] font-medium">{ui.outcomeLoss}</span>
+  return <span className="text-[var(--text-secondary)]">{ui.outcomeNeutral}</span>
 }
 
 /** 欄位說明的「？」圖示，滑鼠懸停顯示 tooltip（可含公式）。align 控制 tooltip 相對圖示的水平對齊，靠邊欄位請用 'left' 以避免被裁切。 */
@@ -194,18 +197,20 @@ function HeaderCell({
   )
 }
 
-const COLUMN_HELP: Record<string, string> = {
-  threshold:
-    '訊號觸發門檻（乖離率）。當收盤價低於 60 日均線的乖離率 ≤ 此閾值時，於次一交易日進場。公式：乖離率 = (收盤價 − MA60) / MA60 × 100%。負值越大代表跌幅越深才進場。',
-  totalTrades:
-    '在此乖離率閾值下，過去所選年數內實際觸發並進場的交易總數。交易採非重疊判定：進場後鎖倉至該筆結束才可再有下一筆。',
-  winRate:
-    '勝場佔已分出勝負場次的比例，平手不計入。公式：勝率 = 勝場數 / (勝場數 + 敗場數) × 100%。',
-  range:
-    '該閾值下所有交易的進場價最低至最高區間。進場價為訊號確認後次一交易日的開盤價。',
+function getColumnHelp(dict: Dict): Record<string, string> {
+  const ui = dict.backtest
+  return {
+    threshold: ui.tableHelpThreshold,
+    totalTrades: ui.tableHelpTrades,
+    winRate: ui.tableHelpWinRate,
+    range: ui.tableHelpPriceRange,
+  }
 }
 
 export default function BacktestPage() {
+  const { dict } = useI18n()
+  const ui = dict.backtest
+  const columnHelp = getColumnHelp(dict)
   const [symbol, setSymbol] = useState('')
   const [holdingDays, setHoldingDays] = useState('40')
   const [targetPct, setTargetPct] = useState('8')
@@ -293,7 +298,7 @@ export default function BacktestPage() {
       const res = await fetch(`/api/backtest?${qs.toString()}`)
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? '回測失敗')
+        setError(data.error ?? ui.errorBacktestFailed)
         return
       }
       setResult(data)
@@ -302,7 +307,7 @@ export default function BacktestPage() {
         if (lb.ok) setLiveBias(await lb.json())
       } catch (_) {}
     } catch {
-      setError('網路錯誤，請稍後再試')
+      setError(ui.errorNetwork)
     } finally {
       setLoading(false)
     }
@@ -325,7 +330,7 @@ export default function BacktestPage() {
       const res = await fetch(`/api/backtest/top-volume?range=${range}`)
       const data = await res.json()
       if (!res.ok) {
-        setTopError(data.error ?? '取得排行榜失敗')
+        setTopError(data.error ?? ui.errorTopVolume)
         setTopList([])
         return
       }
@@ -337,7 +342,7 @@ export default function BacktestPage() {
         fetchInsight(item.symbol)
       }
     } catch {
-      setTopError('網路錯誤，請稍後再試')
+      setTopError(ui.errorTopNetwork)
       setTopList([])
     } finally {
       setTopLoading(false)
@@ -420,16 +425,20 @@ export default function BacktestPage() {
     <div className="max-w-6xl mx-auto px-4 py-10">
       <div className="flex items-center gap-3 mb-2">
         <Target className="w-7 h-7 text-[var(--accent)]" />
-        <h1 className="text-2xl font-bold">週期進場模型預估</h1>
+        <h1 className="text-2xl font-bold">{ui.pageTitle}</h1>
       </div>
       <p className="text-[var(--text-secondary)] mb-8">
-        台股季線乖離回測：訊號收盤確認、次一交易日進場，{holdingDays || 40} 日內先 +{targetPct || 8}% 為勝、先 −{stopPct || 5}% 為敗。使用近 {years || 5} 年歷史資料。
+        {ui.pageDesc
+          .replace('{holdingDays}', holdingDays || '40')
+          .replace('{targetPct}', targetPct || '8')
+          .replace('{stopPct}', stopPct || '5')
+          .replace('{years}', years || '5')}
       </p>
 
       <form onSubmit={run} className="mb-8 space-y-3 max-w-2xl">
         <div className="grid grid-cols-4 gap-2">
           <label className="block flex-1">
-            <span className="block text-xs text-[var(--text-secondary)] mb-1">近 X 年</span>
+            <span className="block text-xs text-[var(--text-secondary)] mb-1">{ui.labelYears}</span>
             <input
               type="number"
               min={1}
@@ -440,7 +449,7 @@ export default function BacktestPage() {
             />
           </label>
           <label className="block flex-1">
-            <span className="block text-xs text-[var(--text-secondary)] mb-1">持有天數</span>
+            <span className="block text-xs text-[var(--text-secondary)] mb-1">{ui.labelHoldingDays}</span>
             <input
               type="number"
               min={1}
@@ -451,8 +460,8 @@ export default function BacktestPage() {
             />
           </label>
           <label className="block flex-1">
-            <span className="block text-xs text-[var(--text-secondary)] mb-1">目標獲利 %
-              <HelpCell text={'這是「鎖定獲利」目標，不是停損。買入後若價格漲到「進場價 × (1 + 8%)」（例如進場 10 萬 → 漲到約 108,000），就觸發 +8% 賣出獲利。若先跌破「進場價 × (1 − 停損%)」(預設 −5%) 則觸發停損出場；價格沒到 +8% 也沒跌破停損，則持有滿「持有天數」後出場。'} />
+            <span className="block text-xs text-[var(--text-secondary)] mb-1">{ui.labelTargetPct}
+              <HelpCell text={ui.targetPctHelp} />
             </span>
             <input
               type="number"
@@ -464,7 +473,7 @@ export default function BacktestPage() {
             />
           </label>
           <label className="block flex-1">
-            <span className="block text-xs text-[var(--text-secondary)] mb-1">停損 %</span>
+            <span className="block text-xs text-[var(--text-secondary)] mb-1">{ui.labelStopPct}</span>
             <input
               type="number"
               min={1}
@@ -486,7 +495,7 @@ export default function BacktestPage() {
                 const q = symbol.trim()
                 if (q && !/^\d{4,6}$/.test(q) && suggestions.length) setShowDropdown(true)
               }}
-              placeholder="輸入台股代號或名稱，如 2330 / 台積電"
+              placeholder={ui.placeholder}
               className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] outline-none text-sm"
             />
             {(showDropdown || searching) && (
@@ -506,7 +515,7 @@ export default function BacktestPage() {
             className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white font-medium text-sm hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
           >
             {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
-            {loading ? '回測中...' : '開始回測'}
+            {loading ? ui.btnBacktesting : ui.btnBacktest}
           </button>
           <button
             type="button"
@@ -514,7 +523,7 @@ export default function BacktestPage() {
             className="px-4 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 text-sm font-medium text-[var(--text-primary)] hover:bg-white/5 transition flex items-center gap-2 shrink-0"
           >
             <ListOrdered className="w-4 h-4 text-[var(--accent)]" />
-            Top 10 成交量
+            {ui.btnTopVolume}
           </button>
         </div>
       </form>
@@ -528,7 +537,7 @@ export default function BacktestPage() {
       {loading && (
         <div className="p-10 text-center text-[var(--text-secondary)]">
           <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />
-          抓取 10 年歷史資料並執行參數尋優...
+          {ui.loadingData}
         </div>
       )}
 
@@ -537,29 +546,29 @@ export default function BacktestPage() {
           {result.belowTarget && (
             <div className="flex items-center gap-2 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
               <AlertTriangle className="w-4 h-4 shrink-0" />
-              無任何進場閾值達到 75% 勝率目標，以下為歷史勝率最高的結果，僅供參考。
+              {ui.belowTargetWarning}
             </div>
           )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-white/5">
               <div className="flex items-center gap-2 text-[var(--text-secondary)] text-xs mb-2">
-                <TrendingDown className="w-3.5 h-3.5" /> 最佳進場乖離率
+                <TrendingDown className="w-3.5 h-3.5" /> {ui.statBestBias}
               </div>
               <div className="text-2xl font-bold text-[var(--accent)]">{fmtPct(result.bestThreshold / 100)}</div>
             </div>
             <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-white/5">
               <div className="flex items-center gap-2 text-[var(--text-secondary)] text-xs mb-2">
-                <Repeat className="w-3.5 h-3.5" /> 歷史總觸發次數
+                <Repeat className="w-3.5 h-3.5" /> {ui.statTotalTriggers}
               </div>
               <div className="text-2xl font-bold">{result.totalTrades}</div>
               <div className="text-xs text-[var(--text-secondary)] mt-1">
-                勝 {result.wins} / 敗 {result.losses} / 平 {result.neutral}
+                {ui.statWin} {result.wins} / {ui.statLoss} {result.losses} / {ui.statNeutral} {result.neutral}
               </div>
             </div>
             <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-white/5">
               <div className="flex items-center gap-2 text-[var(--text-secondary)] text-xs mb-2">
-                <Target className="w-3.5 h-3.5" /> 歷史勝率
+                <Target className="w-3.5 h-3.5" /> {ui.statWinRate}
               </div>
               <div
                 className={`text-2xl font-bold ${
@@ -573,9 +582,9 @@ export default function BacktestPage() {
             </div>
             <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-white/5">
               <div className="flex items-center gap-2 text-[var(--text-secondary)] text-xs mb-2">
-                <Clock className="w-3.5 h-3.5" /> 平均達成 8% 等待天數
+                <Clock className="w-3.5 h-3.5" /> {ui.statAvgDays}
               </div>
-              <div className="text-2xl font-bold">{fmtDays(result.avgDaysToTarget)}</div>
+              <div className="text-2xl font-bold">{fmtDays(result.avgDaysToTarget, ui.daysUnit)}</div>
             </div>
           </div>
 
@@ -583,12 +592,12 @@ export default function BacktestPage() {
             <div className="rounded-xl bg-[var(--bg-card)] border border-white/5 p-4">
               <div className="flex items-center gap-2 text-[var(--text-secondary)] text-xs mb-3">
                 <Activity className="w-3.5 h-3.5 text-[var(--accent)]" />
-                目前乖離率（昨收 vs 60 日均線）· 更新 {formatDate(liveBias.asOf)}
+                {ui.liveBiasTitle.replace('{date}', formatDate(liveBias.asOf))}
               </div>
               <div className="flex flex-wrap gap-x-8 gap-y-3">
                 <div>
                   <div className="text-xs text-[var(--text-secondary)] mb-1">
-                    目前乖離率{liveBias.livePriceBias != null && Math.abs(liveBias.livePriceBias - liveBias.latestBias!) > 0.001 ? `（昨收 ${fmtPct(liveBias.latestBias)}）` : ''}
+                    {ui.liveBiasCurrent}{liveBias.livePriceBias != null && Math.abs(liveBias.livePriceBias - liveBias.latestBias!) > 0.001 ? ui.liveBiasPrevCloseLabel.replace('{bias}', fmtPct(liveBias.latestBias)) : ''}
                   </div>
                   <div
                     className={`text-2xl font-bold ${
@@ -602,28 +611,28 @@ export default function BacktestPage() {
                     {liveBias.livePriceBias != null ? fmtPct(liveBias.livePriceBias) : fmtPct(liveBias.latestBias)}
                   </div>
                   <div className="text-xs text-[var(--text-secondary)] mt-1">
-                    MA60：{liveBias.ma60.toFixed(2)} · 昨收 {liveBias.latestClose.toFixed(2)}
-                    {liveBias.livePrice != null ? ` · 現價 ${liveBias.livePrice.toFixed(2)}` : ''}
+                    {ui.liveBiasMA60}：{liveBias.ma60.toFixed(2)} · {ui.liveBiasPrevClose} {liveBias.latestClose.toFixed(2)}
+                    {liveBias.livePrice != null ? ` · ${ui.liveBiasCurrentPriceLabel.replace('{price}', liveBias.livePrice.toFixed(2))}` : ''}
                   </div>
                 </div>
 
                 {bestThreshold != null && (
                   <div className="border-l border-white/10 pl-6">
-                    <div className="text-xs text-[var(--text-secondary)] mb-1">最佳進場閾值 {fmtPct(bestThreshold / 100)}</div>
+                    <div className="text-xs text-[var(--text-secondary)] mb-1">{ui.liveBiasBestThreshold.replace('{threshold}', fmtPct(bestThreshold / 100))}</div>
                     {targetClosePrice != null && (
                       <div className="text-xl font-bold text-[var(--text-primary)]">
                         {targetClosePrice.toFixed(2)}
-                        <span className="text-xs font-normal text-[var(--text-secondary)] ml-1">（收盤價需 ≤ 此價才觸發）</span>
+                        <span className="text-xs font-normal text-[var(--text-secondary)] ml-1">{ui.liveBiasClosePriceNote}</span>
                       </div>
                     )}
                     <div className="text-xs mt-1">
                       {currentTriggerThreshold != null ? (
                         <span className="text-[var(--accent-green)]">
-                          已達閾值（{fmtPct(currentTriggerThreshold / 100)}），目前在進場區
+                          {ui.liveBiasReached.replace('{threshold}', fmtPct(currentTriggerThreshold / 100))}
                         </span>
                       ) : distanceToTargetPct != null ? (
                         <span className="text-[var(--text-secondary)]">
-                          距最佳進場還需再跌 {distanceToTargetPct.toFixed(1)}%
+                          {ui.liveBiasDistance.replace('{pct}', distanceToTargetPct.toFixed(1))}
                         </span>
                       ) : null}
                     </div>
@@ -635,7 +644,7 @@ export default function BacktestPage() {
 
           <div className="rounded-xl bg-[var(--bg-card)] border border-white/5 p-4">
             <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-sm font-medium">股價 vs 60 日均線（近 {years || 5} 年）</h2>
+              <h2 className="text-sm font-medium">{ui.chartTitle.replace('{years}', years || '5')}</h2>
               {currentBias != null && (
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full ${
@@ -644,7 +653,7 @@ export default function BacktestPage() {
                       : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]'
                   }`}
                 >
-                  目前乖離 {fmtPct(currentBias)}
+                  {ui.chartBadgeCurrentBias.replace('{bias}', fmtPct(currentBias))}
                 </span>
               )}
             </div>
@@ -674,7 +683,7 @@ export default function BacktestPage() {
                       fontSize: 12,
                     }}
                     labelFormatter={(v) => formatDate(v as number)}
-                    formatter={(value, name) => [Number(value).toLocaleString(), name === 'close' ? '收盤價' : 'MA60']}
+                    formatter={(value, name) => [Number(value).toLocaleString(), name === 'close' ? ui.chartTooltipClose : ui.chartTooltipMA60]}
                   />
                   <Line type="monotone" dataKey="close" stroke="var(--accent)" dot={false} strokeWidth={1.7} />
                   <Line type="monotone" dataKey="ma60" stroke="var(--accent-green)" dot={false} strokeWidth={1.3} strokeDasharray="4 3" />
@@ -692,24 +701,24 @@ export default function BacktestPage() {
               </ResponsiveContainer>
             </div>
             <p className="text-xs text-[var(--text-secondary)] mt-3">
-              紅點為歷史進場觸發點。圖表與勝率回測基準皆為近 {years || 5} 年。
+              {ui.chartTriggerDotsNote.replace('{years}', years || '5')}
             </p>
           </div>
 
           {result.allThresholds && result.allThresholds.length > 0 && (
             <div className="rounded-xl bg-[var(--bg-card)] border border-white/5 overflow-hidden">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 border-b border-white/5">
-                <h2 className="text-sm font-medium">各閾值回測結果</h2>
+                <h2 className="text-sm font-medium">{ui.tableTitle}</h2>
                 {currentBias != null && (
                   <span className="text-xs text-[var(--text-secondary)]">
-                    目前乖離率 <span className="text-[var(--text-primary)] font-medium">{fmtPct(currentBias)}</span>
+                    {ui.tableCurrentBias.replace('{bias}', fmtPct(currentBias))}
                     {currentTriggerThreshold != null ? (
                       <>
-                        {' '}位於閾值區間「≤ {fmtPct(currentTriggerThreshold / 100)}」內（已達進場條件）
+                        {' '}{ui.tableInThresholdRange.replace('{threshold}', fmtPct(currentTriggerThreshold / 100))}
                       </>
                     ) : bestThreshold != null ? (
                       <>
-                        {' '}尚未達到任何進場閾值（最佳為 {fmtPct(bestThreshold / 100)}）
+                        {' '}{ui.tableBelowAllThresholds.replace('{threshold}', fmtPct(bestThreshold / 100))}
                       </>
                     ) : null}
                   </span>
@@ -720,31 +729,31 @@ export default function BacktestPage() {
                   <thead>
                     <tr className="text-[var(--text-secondary)] text-xs border-b border-white/5">
                       <HeaderCell
-                        label="進場乖離率"
+                        label={ui.tableHeaderThreshold}
                         sortable
                         active={sortKey === 'threshold'}
                         dir={sortDir}
                         onSort={() => toggleSort('threshold')}
-                        help={COLUMN_HELP.threshold}
+                        help={columnHelp.threshold}
                         helpAlign="left"
                       />
                       <HeaderCell
-                        label="交易次數"
+                        label={ui.tableHeaderTrades}
                         sortable
                         active={sortKey === 'totalTrades'}
                         dir={sortDir}
                         onSort={() => toggleSort('totalTrades')}
-                        help={COLUMN_HELP.totalTrades}
+                        help={columnHelp.totalTrades}
                       />
                       <HeaderCell
-                        label="勝率"
+                        label={ui.tableHeaderWinRate}
                         sortable
                         active={sortKey === 'winRate'}
                         dir={sortDir}
                         onSort={() => toggleSort('winRate')}
-                        help={COLUMN_HELP.winRate}
+                        help={columnHelp.winRate}
                       />
-                      <HeaderCell label="進場價區間" help={COLUMN_HELP.range} />
+                      <HeaderCell label={ui.tableHeaderPriceRange} help={columnHelp.range} />
                     </tr>
                   </thead>
                   <tbody>
@@ -762,11 +771,11 @@ export default function BacktestPage() {
                               <span className="flex items-center gap-1.5">
                                 {fmtPct(row.threshold / 100)}
                                 {row.threshold === result.bestThreshold && (
-                                  <span className="text-[var(--accent)] text-xs">最佳</span>
+                                  <span className="text-[var(--accent)] text-xs">{ui.badgeBest}</span>
                                 )}
                                 {currentBias != null && currentBias <= row.threshold / 100 && (
                                   <span className="text-[var(--accent-green)] text-[10px] bg-[var(--accent-green)]/10 px-1.5 py-0.5 rounded-full">
-                                    目前乖離已觸發
+                                    {ui.badgeTriggered}
                                   </span>
                                 )}
                               </span>
@@ -794,10 +803,10 @@ export default function BacktestPage() {
                                       <table className="w-full text-xs">
                                         <thead>
                                           <tr className="text-[var(--text-secondary)]">
-                                            <th className="px-3 py-1.5 text-left">進場日期</th>
-                                            <th className="px-3 py-1.5 text-left">進場價</th>
-                                            <th className="px-3 py-1.5 text-left">結果</th>
-                                            <th className="px-3 py-1.5 text-left">達成 8% 天數</th>
+                                            <th className="px-3 py-1.5 text-left">{ui.tableHeaderEntryDate}</th>
+                                            <th className="px-3 py-1.5 text-left">{ui.tableHeaderEntryPrice}</th>
+                                            <th className="px-3 py-1.5 text-left">{ui.tableHeaderResult}</th>
+                                            <th className="px-3 py-1.5 text-left">{ui.tableHeaderDaysToTarget.replace('{pct}', targetPct || '8')}</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -811,11 +820,11 @@ export default function BacktestPage() {
                                                 </td>
                                                 <td className="px-3 py-1.5 font-mono">{t.entryPrice.toFixed(2)}</td>
                                                 <td className="px-3 py-1.5">
-                                                  <OutcomeBadge outcome={t.outcome} />
+                                                  <OutcomeBadge outcome={t.outcome} dict={dict} />
                                                 </td>
                                                 <td className="px-3 py-1.5">
                                                   {t.outcome === 'win' && t.daysToTarget != null
-                                                    ? `${t.daysToTarget} 天`
+                                                    ? ui.daysUnit.replace('{n}', String(t.daysToTarget))
                                                     : '—'}
                                                 </td>
                                               </tr>
@@ -824,7 +833,7 @@ export default function BacktestPage() {
                                       </table>
                                     </div>
                                   ) : (
-                                    <p className="text-[var(--text-secondary)] text-xs">無觸發交易</p>
+                                    <p className="text-[var(--text-secondary)] text-xs">{ui.noTrades}</p>
                                   )}
                                 </td>
                               </tr>
@@ -852,12 +861,12 @@ export default function BacktestPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <ListOrdered className="w-5 h-5 text-[var(--accent)]" />
-                <h2 className="text-base font-bold">台股成交量 Top 20（上市）</h2>
+                <h2 className="text-base font-bold">{ui.topModalTitle}</h2>
               </div>
               <button
                 onClick={() => setShowTop(false)}
                 className="p-1.5 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]"
-                aria-label="關閉"
+                aria-label={ui.topCloseAria}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -866,10 +875,10 @@ export default function BacktestPage() {
             <div className="flex gap-1.5 px-5 pt-4">
               {(
                 [
-                  ['day', '當日'],
-                  ['week', '當週'],
-                  ['month', '當月'],
-                  ['quarter', '當季'],
+                  ['day', ui.topRangeDay],
+                  ['week', ui.topRangeWeek],
+                  ['month', ui.topRangeMonth],
+                  ['quarter', ui.topRangeQuarter],
                 ] as [TopVolumeRange, string][]
               ).map(([r, label]) => (
                 <button
@@ -890,14 +899,14 @@ export default function BacktestPage() {
               {topLoading ? (
                 <div className="py-10 text-center text-[var(--text-secondary)]">
                   <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
-                  {topRange === 'day' ? '抓取資料中...' : '累加近期成交量中，可能需要幾秒...'}
+                  {topRange === 'day' ? ui.topLoadingDay : ui.topLoadingOther}
                 </div>
               ) : topError ? (
                 <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                   {topError}
                 </div>
               ) : topList.length === 0 ? (
-                <div className="py-10 text-center text-[var(--text-secondary)] text-sm">查無資料</div>
+                <div className="py-10 text-center text-[var(--text-secondary)] text-sm">{ui.topNoData}</div>
               ) : (
                 <div className="max-h-96 overflow-y-auto">
                   {topList.map((item) => {
@@ -919,12 +928,12 @@ export default function BacktestPage() {
                         <span className="flex-1 min-w-0 text-sm text-[var(--text-primary)] truncate">{item.name}</span>
                         <div className="shrink-0 text-right">
                           <div className="text-sm text-[var(--text-primary)] font-medium tabular-nums">
-                            {fmtVolume(item.volume)}
+                            {fmtVolume(item.volume, ui.volumeUnitBillion, ui.volumeUnitTenThousand)}
                           </div>
                           {insight === 'loading' ? (
                             <div className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] justify-end">
                               <RefreshCw className="w-3 h-3 animate-spin" />
-                              計算閾值中...
+                              {ui.topLoadingThreshold}
                             </div>
                           ) : insight === 'error' ? (
                             <div className="text-[11px] text-[var(--text-secondary)]">—</div>
@@ -933,14 +942,14 @@ export default function BacktestPage() {
                               {insight.inEntryZone ? (
                                 <span className="inline-flex items-center gap-1 text-[var(--accent-green)] font-semibold">
                                   <Zap className="w-3 h-3" />
-                                  已達閾值（{fmtPct(insight.bestThreshold != null ? insight.bestThreshold / 100 : 0)}）· 進場區
+                                  {ui.topReachedThreshold.replace('{threshold}', fmtPct(insight.bestThreshold != null ? insight.bestThreshold / 100 : 0))} · {ui.topEntryZone}
                                 </span>
                               ) : insight.distanceToTargetPct != null && insight.bestThreshold != null ? (
                                 <span className="text-[var(--text-secondary)]">
-                                  閾值 {fmtPct(insight.bestThreshold / 100)} · 距進場 -{insight.distanceToTargetPct.toFixed(1)}%
+                                  {ui.topThreshold.replace('{threshold}', fmtPct(insight.bestThreshold / 100))} · {ui.topDistance.replace('{pct}', insight.distanceToTargetPct.toFixed(1))}
                                 </span>
                               ) : (
-                                <span className="text-[var(--text-secondary)]">資料不足</span>
+                                <span className="text-[var(--text-secondary)]">{ui.topInsufficientData}</span>
                               )}
                             </div>
                           ) : null}
@@ -953,7 +962,7 @@ export default function BacktestPage() {
             </div>
 
             <div className="px-5 pb-4 text-xs text-[var(--text-secondary)]">
-              綠色標示表示目前已達進場閾值（在進場區）。點擊任一股票即自動填入代號並開始回測。
+              {ui.topFooterHint}
             </div>
           </div>
         </div>

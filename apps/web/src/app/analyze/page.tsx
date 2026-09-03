@@ -8,10 +8,13 @@ import { SearchBar } from '@/components/search-bar'
 import { AnalysisCard } from '@/components/analysis-card'
 import { ProgressPanel } from '@/components/progress-panel'
 import { AnalysisOptions } from '@/components/analysis-options'
+import { useI18n } from '@/i18n/LanguageProvider'
+import type { Dict } from '@/i18n/dictionaries'
 
-function formatLLMError(raw: string): string {
+function formatLLMError(raw: string, dict: Dict): string {
+  const ui = dict.analyzePage
   if (/rate.?limit|429|tokens per minute|TPM|exhausted/i.test(raw)) {
-    return 'AI 模型額度暫時用完，請稍後再試（約 1 分鐘後）'
+    return ui.llmRateLimited
   }
   return raw
 }
@@ -30,7 +33,9 @@ interface AnalysisRecord {
 function AnalyzeContent() {
   const searchParams = useSearchParams()
   const symbolParam = searchParams.get('symbol') || searchParams.get('stock_id') || ''
-  
+  const { locale: language, setLocale: setLanguage, dict } = useI18n()
+  const ui = dict.analyzePage
+
   const [analysis, setAnalysis] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +45,6 @@ function AnalyzeContent() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [language, setLanguage] = useState<AnalysisLanguage>('zh-TW')
   const [enabledAgents, setEnabledAgents] = useState<string[]>([...AGENT_KEYS])
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null)
   const [assetType, setAssetType] = useState<string | null>(null)
@@ -130,7 +134,7 @@ function AnalyzeContent() {
 
   const handleAnalyze = useCallback(async (symbol: string) => {
     if (enabledAgents.length === 0) {
-      setError('至少須啟用一個 Agent 才能開始分析。請在「AI 分析設定」中啟用。')
+      setError(ui.minAgentError)
       return
     }
     setLoading(true)
@@ -165,7 +169,7 @@ function AnalyzeContent() {
           return
         }
         if (res.status === 429) {
-          setError(body.error || `今日額度已用完 (${body.quota?.used ?? 3}/3)`)
+          setError(body.error || ui.rateLimitError.replace('{used}', String(body.quota?.used ?? 3)))
           return
         }
         throw new Error(body.error || `HTTP ${res.status}`)
@@ -218,7 +222,7 @@ function AnalyzeContent() {
               window.dispatchEvent(new Event('quota-updated'))
               break
             case 'error':
-              setError(formatLLMError(parsed.message))
+              setError(formatLLMError(parsed.message, dict))
               setRetryCountdown(null)
               break
           }
@@ -273,7 +277,7 @@ function AnalyzeContent() {
       }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        setError(body.error || `刪除失敗 (HTTP ${res.status})`)
+        setError(body.error || ui.deleteFailed.replace('{status}', String(res.status)))
         return
       }
       if (selectedRecordId === record.id) {
@@ -305,18 +309,18 @@ function AnalyzeContent() {
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-white/5">
           <BarChart3 className="w-5 h-5 text-[var(--accent)] mb-2" />
-          <div className="text-sm text-[var(--text-secondary)]">Markets</div>
-          <div className="text-lg font-semibold">US + Taiwan</div>
+          <div className="text-sm text-[var(--text-secondary)]">{ui.statMarkets}</div>
+          <div className="text-lg font-semibold">{ui.statMarketsValue}</div>
         </div>
         <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-white/5">
           <Brain className="w-5 h-5 text-[var(--accent-green)] mb-2" />
-          <div className="text-sm text-[var(--text-secondary)]">AI Analysis</div>
-          <div className="text-lg font-semibold">{enabledAgents.length}/8 agents</div>
+          <div className="text-sm text-[var(--text-secondary)]">{ui.statAiLabel}</div>
+          <div className="text-lg font-semibold">{ui.statAiValue.replace('{n}', String(enabledAgents.length))}</div>
         </div>
         <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-white/5">
           <Clock className="w-5 h-5 text-[var(--accent)] mb-2" />
-          <div className="text-sm text-[var(--text-secondary)]">Est. time</div>
-          <div className="text-lg font-semibold">3-5 min</div>
+          <div className="text-sm text-[var(--text-secondary)]">{ui.statEstTime}</div>
+          <div className="text-lg font-semibold">{ui.statEstTimeValue}</div>
         </div>
       </div>
 
@@ -332,7 +336,7 @@ function AnalyzeContent() {
             }`}
           >
             <Brain className="w-3.5 h-3.5" />
-            {assetType === 'etf' ? '判定為 ETF（指數股票型基金）' : assetType === 'index' ? '判定為 指數' : '判定為 個股'}
+            {assetType === 'etf' ? ui.agentClassifiedEtf : assetType === 'index' ? ui.agentClassifiedIndex : ui.agentClassifiedStock}
           </span>
         </div>
       )}
@@ -361,7 +365,7 @@ function AnalyzeContent() {
                   <div className="flex items-center gap-2 mb-1">
                     <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
                     <span className="text-sm font-medium text-amber-400">
-                      Rate limited, retrying in {retryCountdown}s...
+                      {ui.runningRetry.replace('{n}', String(retryCountdown))}
                     </span>
                   </div>
                   <div className="w-full bg-white/5 rounded-full h-1.5 mt-2">
@@ -376,11 +380,11 @@ function AnalyzeContent() {
                   <div className="flex items-center gap-2 mb-1">
                     <div className="w-2 h-2 bg-[var(--accent)] rounded-full animate-pulse" />
                     <span className="text-sm font-medium">
-                      Running analysis... ({minutes}:{String(seconds).padStart(2, '0')})
+                      {ui.runningTitle.replace('{m}', String(minutes)).replace('{s}', String(seconds).padStart(2, '0'))}
                     </span>
                   </div>
                   <div className="text-xs text-[var(--text-secondary)]">
-                    Running 8 AI agents sequentially via OpenCode LLM models
+                    {ui.runningSubtitle}
                   </div>
                 </>
               )}
@@ -391,12 +395,12 @@ function AnalyzeContent() {
             <div className="space-y-4">
               {selectedRecordId && (
                 <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-lg text-emerald-400 text-xs">
-                  <span>已載入歷史分析報告 (Record #{selectedRecordId})</span>
+                  <span>{ui.historyLoaded.replace('{id}', String(selectedRecordId))}</span>
                   <button 
                     onClick={() => setSelectedRecordId(null)}
                     className="hover:underline text-[var(--text-secondary)]"
                   >
-                    關閉提示
+                    {ui.historyLoadedClose}
                   </button>
                 </div>
               )}
@@ -406,7 +410,7 @@ function AnalyzeContent() {
 
           {error && (
             <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">
-              Error: {error}
+              {ui.errorPrefix}{error}
             </div>
           )}
         </div>
@@ -418,7 +422,7 @@ function AnalyzeContent() {
           <div className="flex items-center gap-2">
             <History className="w-5 h-5 text-[var(--accent)]" />
             <h2 className="text-xl font-bold">
-              {symbolParam ? `${symbolParam} 專屬 AI 分析歷史紀錄` : '歷史 AI 分析紀錄 (Analysis History)'}
+              {symbolParam ? ui.historyTitleSymbol.replace('{symbol}', symbolParam) : ui.historyTitleAll}
             </h2>
           </div>
           
@@ -428,7 +432,7 @@ function AnalyzeContent() {
                 href="/analyze"
                 className="text-xs text-[var(--accent)] hover:underline flex items-center gap-1 bg-[var(--accent)]/10 border border-[var(--accent)]/20 px-2.5 py-1 rounded-lg"
               >
-                <span>清除專屬視角 (看全部)</span>
+                <span>{ui.clearSymbolView}</span>
               </a>
             )}
             <button
@@ -437,7 +441,7 @@ function AnalyzeContent() {
               className="text-xs text-[var(--text-secondary)] hover:text-white transition-colors flex items-center gap-1"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${historyLoading ? 'animate-spin' : ''}`} />
-              <span>{historyLoading ? '刷新中...' : '重新整理'}</span>
+              <span>{historyLoading ? ui.refreshing : ui.refresh}</span>
             </button>
           </div>
         </div>
@@ -446,19 +450,19 @@ function AnalyzeContent() {
           <div className="bg-[var(--bg-card)] rounded-xl p-8 border border-white/5 text-center text-sm text-[var(--text-secondary)]">
             {symbolParam ? (
               <div className="space-y-3">
-                <p className="font-medium text-white text-base">尚無 {symbolParam} 的歷史 AI 評估紀錄</p>
-                <p className="text-xs">您可以直接點擊上方搜尋欄一鍵為 {symbolParam} 生成全新的 AI 評估報告！</p>
+                <p className="font-medium text-white text-base">{ui.noHistoryFor.replace('{symbol}', symbolParam)}</p>
+                <p className="text-xs">{ui.noHistoryHint.replace('{symbol}', symbolParam)}</p>
                 <button
                   onClick={() => handleAnalyze(symbolParam)}
                   disabled={loading}
                   className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent)] text-white font-medium text-xs hover:opacity-90 transition"
                 >
                   <Brain className="w-4 h-4" />
-                  <span>立即對 {symbolParam} 進行 AI 評估</span>
+                  <span>{ui.analyzeNowFor.replace('{symbol}', symbolParam)}</span>
                 </button>
               </div>
             ) : (
-              '尚無歷史分析紀錄。請在上方搜尋框輸入股票代號（例如 2330.TW 或 SPCX）開始進行 AI 評估！'
+              ui.noHistoryTitle
             )}
           </div>
         ) : (
@@ -497,10 +501,10 @@ function AnalyzeContent() {
                     {recordTokens !== null && (
                       <span
                         className="inline-flex items-center gap-1 whitespace-nowrap text-[var(--accent)]"
-                        title="本次分析消耗的 token 數"
+                        title={ui.tokenHint}
                       >
                         <Zap className="w-3 h-3" />
-                        {recordTokens.toLocaleString()} tokens
+                        {ui.tokenCount.replace('{n}', recordTokens.toLocaleString())}
                       </span>
                     )}
                   </div>
@@ -512,14 +516,14 @@ function AnalyzeContent() {
                           handleDeleteRecord(record)
                         }}
                         className="flex items-center gap-1 text-rose-400/80 hover:text-rose-400 transition-colors"
-                        title="刪除此筆分析紀錄（管理者）"
+                        title={ui.deleteRecordTitle}
                       >
                         <Trash2 className="w-3 h-3" />
-                        <span>刪除</span>
+                        <span>{ui.deleteRecord}</span>
                       </button>
                     )}
                     <span className="flex items-center gap-0.5 text-[var(--accent)] hover:underline whitespace-nowrap">
-                      查看完整報告 <ChevronRight className="w-3 h-3" />
+                      {ui.viewFullReport} <ChevronRight className="w-3 h-3" />
                     </span>
                   </div>
                 </div>
@@ -534,10 +538,11 @@ function AnalyzeContent() {
 }
 
 export default function AnalyzePage() {
+  const { dict } = useI18n()
   return (
     <Suspense fallback={
       <div className="max-w-6xl mx-auto px-4 py-16 text-center text-sm text-[var(--text-secondary)]">
-        載入專屬 AI 分析頁面中...
+        {dict.analyzePage.loadingAnalyze}
       </div>
     }>
       <AnalyzeContent />

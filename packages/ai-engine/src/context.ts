@@ -12,12 +12,22 @@ export const CONTEXT_FIELD_LIMIT = Number(process.env.CONTEXT_FIELD_LIMIT) || 14
 /**
  * 截斷字串到指定長度，並附註已省略的內容量，讓 LLM 知道資訊不完整。
  */
-export function truncateField(value: string | undefined, fieldPrefix: string, limit = CONTEXT_FIELD_LIMIT): string {
+export type TruncateLanguage = 'zh-TW' | 'en' | 'ja'
+
+export function truncateField(
+  value: string | undefined,
+  fieldPrefix: string,
+  limit = CONTEXT_FIELD_LIMIT,
+  language: TruncateLanguage = 'zh-TW',
+): string {
   const text = value?.trim() ?? ''
   if (!text) return fieldPrefix
   if (text.length <= limit) return `${fieldPrefix}\n${text}`
   const head = text.slice(0, limit)
-  return `${fieldPrefix}\n${head}\n…（已截斷 ${text.length - limit} 字元）`
+  const omitted = text.length - limit
+  const note =
+    language === 'ja' ? `…（${omitted} 文字を省略）` : language === 'en' ? `…(truncated ${omitted} chars)` : `…（已截斷 ${omitted} 字元）`
+  return `${fieldPrefix}\n${head}\n${note}`
 }
 
 /** 用於 Bull/Bear Researcher：整併前段分析報告並套用各自預算。 */

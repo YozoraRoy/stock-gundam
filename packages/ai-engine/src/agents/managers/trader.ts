@@ -76,8 +76,8 @@ export function createTrader(llm: LLMClient) {
     const prompt = [
       `You are the Trader. Convert the Research Manager's plan into a concrete trade proposal.`,
       '',
-      truncateField(state.instrumentContext, 'Resources:'),
-      truncateField(state.investmentPlan, `Investment Plan:`),
+      truncateField(state.instrumentContext, 'Resources:', undefined, state.outputLanguage),
+      truncateField(state.investmentPlan, `Investment Plan:`, undefined, state.outputLanguage),
       '',
       `Specify: action (Buy/Hold/Sell), reasoning, entry price, stop loss, and position sizing.`,
       '',

@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     }
 
     const outputLanguage: AnalysisLanguage =
-      language === 'en' || language === 'zh-TW' ? language : DEFAULT_ANALYSIS_LANGUAGE
+      language === 'en' || language === 'ja' || language === 'zh-TW' ? language : DEFAULT_ANALYSIS_LANGUAGE
 
     const enabledAgents = Array.isArray(agents)
       ? agents.filter((a: unknown): a is string => typeof a === 'string' && AGENT_KEY_SET.has(a))

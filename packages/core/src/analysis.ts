@@ -1,10 +1,11 @@
-export type AnalysisLanguage = 'zh-TW' | 'en'
+export type AnalysisLanguage = 'zh-TW' | 'en' | 'ja'
 
 export const DEFAULT_ANALYSIS_LANGUAGE: AnalysisLanguage = 'zh-TW'
 
-export const ANALYSIS_LANGUAGE_OPTIONS: { id: AnalysisLanguage; label: string; labelEn: string }[] = [
-  { id: 'zh-TW', label: '繁體中文', labelEn: 'Traditional Chinese' },
-  { id: 'en', label: 'English', labelEn: 'English' },
+export const ANALYSIS_LANGUAGE_OPTIONS: { id: AnalysisLanguage; label: string; labelEn: string; labelJa: string }[] = [
+  { id: 'zh-TW', label: '繁體中文', labelEn: 'Traditional Chinese', labelJa: '繁体中国語' },
+  { id: 'en', label: 'English', labelEn: 'English', labelJa: '英語' },
+  { id: 'ja', label: '日本語', labelEn: 'Japanese', labelJa: '日本語' },
 ]
 
 /**
@@ -43,6 +44,15 @@ export function buildAnalysisLanguageInstruction(
     return [
       'Language & Currency Instructions:',
       '- Write your entire report in Traditional Chinese (繁體中文).',
+      '- Present and calculate every monetary amount in New Taiwan Dollars (NTD / TWD, symbol NT$).',
+      `- If the source data is quoted in another currency (e.g., US stocks in USD), keep the original currency labeled, and also convert USD figures to NTD using 1 USD ≈ NT$ ${rate}.`,
+    ].join('\n')
+  }
+
+  if (language === 'ja') {
+    return [
+      'Language & Currency Instructions:',
+      '- Write your entire report in Japanese (日本語).',
       '- Present and calculate every monetary amount in New Taiwan Dollars (NTD / TWD, symbol NT$).',
       `- If the source data is quoted in another currency (e.g., US stocks in USD), keep the original currency labeled, and also convert USD figures to NTD using 1 USD ≈ NT$ ${rate}.`,
     ].join('\n')

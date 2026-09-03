@@ -4,16 +4,17 @@ import {
   ThumbsUp, ClipboardList, ShoppingCart, Briefcase,
   LucideIcon,
 } from 'lucide-react'
+import { useI18n } from '@/i18n/LanguageProvider'
 
 const STEPS = [
-  { key: 'Market Analyst', label: '市場技術分析', icon: TrendingUp },
-  { key: 'Sentiment Analyst', label: '市場情緒分析', icon: AlertTriangle },
-  { key: 'News Analyst', label: '新聞與總經分析', icon: Newspaper },
-  { key: 'Fundamentals Analyst', label: '基本面分析', icon: BarChart3 },
-  { key: 'Bull Researcher', label: '多方研究', icon: ThumbsUp },
-  { key: 'Research Manager', label: '研究總結', icon: ClipboardList },
-  { key: 'Trader', label: '交易提案', icon: ShoppingCart },
-  { key: 'Portfolio Manager', label: '最終決策', icon: Briefcase },
+  { key: 'Market Analyst', icon: TrendingUp },
+  { key: 'Sentiment Analyst', icon: AlertTriangle },
+  { key: 'News Analyst', icon: Newspaper },
+  { key: 'Fundamentals Analyst', icon: BarChart3 },
+  { key: 'Bull Researcher', icon: ThumbsUp },
+  { key: 'Research Manager', icon: ClipboardList },
+  { key: 'Trader', icon: ShoppingCart },
+  { key: 'Portfolio Manager', icon: Briefcase },
 ] as const
 
 interface ProgressPanelProps {
@@ -22,6 +23,8 @@ interface ProgressPanelProps {
 }
 
 export function ProgressPanel({ progress, enabledAgents }: ProgressPanelProps) {
+  const { dict } = useI18n()
+  const ui = dict.progressPanel
   const lastEvent = progress[progress.length - 1]
   const currentStep = lastEvent?.detail === 'running...' ? lastEvent.step : null
 
@@ -40,10 +43,11 @@ export function ProgressPanel({ progress, enabledAgents }: ProgressPanelProps) {
   return (
     <div className="bg-[var(--bg-card)] rounded-xl border border-white/5 p-5 space-y-3">
       <h3 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-        Analysis Progress
+        {ui.title}
       </h3>
       <div className="space-y-2">
-        {STEPS.map(({ key, label, icon: Icon }) => {
+        {STEPS.map(({ key, icon: Icon }) => {
+          const label = ui.eachAgent[key] ?? key
           const isEnabled = !enabledAgents || enabledAgents.includes(key)
           const isDone = completed.has(key)
           const isCurrent = key === currentStep
@@ -53,7 +57,7 @@ export function ProgressPanel({ progress, enabledAgents }: ProgressPanelProps) {
               <div
                 key={key}
                 className="flex items-center gap-3 px-3 py-2 rounded-lg opacity-30"
-                title="此 Agent 已停用，不會執行"
+                title={ui.disabledTooltip}
               >
                 <div className="w-5 h-5 flex items-center justify-center">
                   <span className="text-[10px] text-[var(--text-secondary)]">–</span>
@@ -61,7 +65,7 @@ export function ProgressPanel({ progress, enabledAgents }: ProgressPanelProps) {
                 <Icon className="w-4 h-4" />
                 <span className="text-sm">{label}</span>
                 <span className="text-[10px] text-[var(--text-secondary)] ml-auto">
-                  已停用
+                  {ui.disabled}
                 </span>
               </div>
             )
@@ -99,12 +103,12 @@ export function ProgressPanel({ progress, enabledAgents }: ProgressPanelProps) {
               </span>
               {isCurrent && (
                 <span className="text-xs text-[var(--accent)] ml-auto animate-pulse">
-                  Analyzing...
+                  {ui.analyzing}
                 </span>
               )}
               {isDone && (
                 <span className="text-xs text-[var(--accent-green)] ml-auto">
-                  Done
+                  {ui.done}
                 </span>
               )}
             </div>

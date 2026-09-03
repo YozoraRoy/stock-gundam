@@ -45,9 +45,9 @@ export function createResearchManager(llm: LLMClient) {
     const prompt = [
       `You are the Research Manager. Synthesize the bull/bear debate and produce an investment plan.`,
       '',
-      truncateField(state.instrumentContext, 'Resources:'),
-      truncateField(state.investDebate.bullHistory, `Bull arguments:`),
-      truncateField(state.investDebate.bearHistory, `Bear arguments:`),
+      truncateField(state.instrumentContext, 'Resources:', undefined, state.outputLanguage),
+      truncateField(state.investDebate.bullHistory, `Bull arguments:`, undefined, state.outputLanguage),
+      truncateField(state.investDebate.bearHistory, `Bear arguments:`, undefined, state.outputLanguage),
       '',
       `Rate: Buy / Overweight / Hold / Underweight / Sell`,
       `Provide rationale and strategic actions.`,
