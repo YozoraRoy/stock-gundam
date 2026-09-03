@@ -156,10 +156,10 @@ export default async function OddLotPage({
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">台灣零股行情與股東會紀念品情報</h1>
           </div>
           <p className="text-sm text-[var(--text-secondary)]">
-            即時整合 TWSE 盤後零股交易數據與股東會紀念品領取最後期限
+            即時整合 TWSE 盤後零股交易數據(TWT53U)與股東會紀念品領取最後期限
             {latestDateStr && (
               <span className="ml-2 font-medium text-[var(--accent)]">
-                · 最新開盤數據：{formattedLatestDate}
+                · 最新盤後交易日：{formattedLatestDate}
               </span>
             )}
           </p>

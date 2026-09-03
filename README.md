@@ -31,6 +31,7 @@
 
 ### 2. 🎁 零股行情與股東會紀念品情報 (`/odd-lot`)
 * **TWSE 盤後零股官方 OpenAPI 直連**：介接證交所官方 OpenAPI (`TWT53U`)，載入全台灣上千檔零股成交價格與成交股數。
+* **正確標示「盤後零股」資料**：TWT53U 為證交所於收盤後（約 15:00）公布之**盤後零股**交易資料，頁面正確標示「盤後零股」而非「開盤」，並顯示**最新盤後交易日**與**最後更新時間**，讓使用者明確知道資料新鮮度。
 * **1 股單價與成交總金額雙欄位**：精準拆分為 **`💵 1股成交價`**（顯示例如 `NT$ 25.60`）與 **`💰 成交總金額`**（顯示例如 `NT$ 66.4 萬`），修復數值排序與多重複算問題。
 * **紀念品智慧自動分類與 7 大頁籤篩選 (Filter Pills)**：
   * ✨ **全部** (全市場標的)
@@ -75,11 +76,17 @@
 ### 7. ⏰ Azure 雙重定時自動排程機制 (WebJobs & Cron API)
 * **Azure WebJobs 雲端內建排程**：台灣時間每個工作日下午 **14:30** 盤後自動啟動 TWSE 零股與 `stock.gift` 雙爬蟲與 eGift 智慧正規化，無縫更新資料庫。
 * **Cron HTTP API 端點 (`/api/cron/seed`)**：提供 API 端點支援外部 Cron 服務（如 Azure Logic Apps, GitHub Actions）隨時觸發全台爬蟲！
+* **GitHub Actions 每日盤後零股同步**（`.github/workflows/sync-oddlot.yml`）：每週一至五 **台灣時間 15:10**（TWSE 盤後零股約 15:00 公布後）自動觸發，以 Asia/Taipei 時區推算交易日期後呼叫 `POST /api/odd-lot/refresh?date=YYYYMMDD`，帶 `Authorization: Bearer SYNC_TOKEN` 更新當日盤後零股行情，確保 production 資料庫每日自動保持最新。
+
+#### 🛡️ 行情 refresh 端點安全保護 (`POST /api/odd-lot/refresh`)
+* **授權門檻**：端點要求 **Bearer `SYNC_TOKEN`**（或已登入使用者），未授權回傳 `401`，防止外部任意寫入。
+* **頻率限制 (節流)**：針對同一交易日期，**10 分鐘**內重複觸發會回傳 `throttled` 且不重複抓取，避免排程與手動更新互相疊加重複開支。
+* **日期參數**：支援 `?date=YYYYMMDD`（或 `YYYY-MM-DD` / `YYYY/MM/DD`），未指定則以 Asia/Taipei 推算最近交易日。
 
 ### 🛡️ 8. 數據持久化與防洗資料保護 (Data Loss Prevention)
 * **資料庫路徑**：`DATABASE_PATH=/home/data/stock.db`（鎖定於 Azure NFS 持久化硬碟區）；若設定 `DATABASE_URL` 則使用 Azure SQL Server。
 * **防洗資料保護**：系統會嚴格檢查持久化資料庫，**不會抹除整個 DB 檔／刪除歷史紀錄**——使用者的歷史 AI 分析紀錄與各交易日盤後資料**永久保留**。
-* **盤後行情逐日更新**：零股盤後價量以 TWSE 官方 TWT53U 為唯一來源，每日 WebJob／手動更新時**逐股以官方值覆寫當日資料列**（SQLite `INSERT OR REPLACE`、Azure `MERGE`），不採任何硬編碼參考價覆寫，確保與證交所一致。
+* **盤後行情逐日更新**：零股盤後價量以 TWSE 官方 TWT53U 為唯一來源，每日 WebJob／GitHub Actions 排程（`sync-oddlot.yml`，台灣時間 15:10）／手動更新時**逐股以官方值覆寫當日資料列**（SQLite `INSERT OR REPLACE`、Azure `MERGE`），不採任何硬編碼參考價覆寫，確保與證交所一致。
 
 ---
 
@@ -232,6 +239,7 @@ git push origin main   # ← 自動觸發部署
 | `FALLBACK_QUICK_LLM_BACKEND_URL` | 備援（quick 組）免費 API 的 baseUrl（可留空沿用 primary） | `FALLBACK_QUICK_LLM_BACKEND_URL` |
 | `FALLBACK_QUICK_LLM_API_KEY` | 備援（quick 組）免費 API 的 apiKey | `FALLBACK_QUICK_LLM_API_KEY` |
 | `DATABASE_URL` | SQL Server 連線字串 | `DATABASE_URL` |
+| `SYNC_TOKEN` | 行情 refresh 端點 (`/api/odd-lot/refresh`) 授權用的 Bearer Token（`openssl rand -hex 32` 產生，需 ≥16 字元） | `SYNC_TOKEN` |
 | `AUTH_SECRET` | 登入 JWT 簽章密鑰（`openssl rand -base64 32` 產生，禁止進 repo） | `AUTH_SECRET` |
 | `GOOGLE_CLIENT_ID` | Google OAuth 用戶端 ID | `GOOGLE_CLIENT_ID` |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 用戶端密鑰 | `GOOGLE_CLIENT_SECRET` |

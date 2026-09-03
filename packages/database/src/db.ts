@@ -24,6 +24,7 @@ let _poolFailed = false
 
 // ─── Shared state ────────────────────────────────────────────────
 let _giftsSeeded = false
+let _oddLotSeeded = false
 const memoryStore: AnalysisRecord[] = []
 let memoryIdCounter = 1
 const portfolioMemoryStore: PortfolioRecord[] = []
@@ -605,8 +606,13 @@ async function ensureSeedDataAzure(): Promise<number> {
   const pool = await getAzurePool()
   if (!pool) return 0
 
-  const countResult = await pool.request().query('SELECT COUNT(*) as cnt FROM odd_lot_trades')
-  const cnt = countResult.recordset[0]?.cnt ?? 0
+  // 只在初次呼叫時確認資料筆數並（必要時）seed；之後以 per-process flag 略過，
+  // 避免每頁/每次 API request 都對逐日累積的 odd_lot_trades 跑 COUNT(*)。
+  let cnt = _oddLotSeeded ? -1 : 0
+  if (!_oddLotSeeded) {
+    const countResult = await pool.request().query('SELECT COUNT(*) as cnt FROM odd_lot_trades')
+    cnt = countResult.recordset[0]?.cnt ?? 0
+  }
   const batchSize = 200
 
   if (cnt < 50) {
@@ -669,6 +675,9 @@ async function ensureSeedDataAzure(): Promise<number> {
     console.log('[AzureSQL] Seed data inserted')
   }
 
+  // 無論資料是否已存在，確認過一次後就標記已做，後續呼叫略過 COUNT(*) 與 seed。
+  _oddLotSeeded = true
+
   if (!_giftsSeeded) {
     console.log(`[AzureSQL] Ensuring ${SEED_GIFTS.length} seed gifts...`)
     try {
@@ -712,8 +721,8 @@ async function ensureSeedDataAzure(): Promise<number> {
     }
   }
 
-  const finalCount = await pool.request().query('SELECT COUNT(*) as cnt FROM odd_lot_trades')
-  return finalCount.recordset[0]?.cnt ?? 0
+  // 已確認過（cnt >= 0）就直接回傳已知筆數，避免再跑一次 COUNT(*)。
+  return cnt >= 0 ? cnt : -1
 }
 
 function ensureSeedDataSqlite(): number {

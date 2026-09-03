@@ -58,8 +58,11 @@ Workflow 檔：`.github/workflows/deploy.yml`（`push` 到 `main` 觸發）。
 - `FALLBACK_DEEP_LLM_BACKEND_URL` / `FALLBACK_DEEP_LLM_API_KEY`：備援（deep 組）免費 API 參數（可留空沿用 primary）
 - `FALLBACK_QUICK_LLM_BACKEND_URL` / `FALLBACK_QUICK_LLM_API_KEY`：備援（quick 組）免費 API 參數（可留空沿用 primary）
 - `DATABASE_URL`：SQL Server 連線字串
+- `SYNC_TOKEN`：行情 refresh 端點（`POST /api/odd-lot/refresh`）授權用的 Bearer Token（`openssl rand -hex 32`，需 ≥16 字元）。用於每日 `sync-oddlot.yml`（台灣時間 15:10 更新盤後零股）與手動排程。未設定 ⇒ 排程 refresh 會回 401。
 
 **部署確認**：`gh run list` / `gh run watch <id>`，或 GitHub Actions 頁面。
+
+> 除 `deploy.yml` 外還有兩個常態排程 Workflow：`sync-data.yml`（台灣 02:30 同步紀念品 gift+MOPS）與 `sync-oddlot.yml`（台灣 15:10 同步盤後零股行情）。推送 `main` 即會帶入新的/修改的 Workflow 檔並自動註冊排程。
 
 ### 關鍵設定
 

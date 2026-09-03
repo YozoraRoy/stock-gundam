@@ -421,9 +421,18 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
     try {
       const res = await fetch('/api/odd-lot/refresh', { method: 'POST' })
       const json = await res.json()
+      if (res.status === 401) {
+        const url = `/login?redirect=${encodeURIComponent('/odd-lot')}`
+        window.location.href = url
+        return
+      }
       if (json.success) {
-        setRefreshMsg({ type: 'success', text: `已更新 ${json.oddLotCount} 筆零股 + ${json.giftCount} 筆紀念品，重新整理頁面...` })
-        setTimeout(() => window.location.reload(), 1200)
+        if (json.throttled) {
+          setRefreshMsg({ type: 'error', text: '剛剛才更新過，請稍後幾分鐘再試（避免重複抓取）' })
+        } else {
+          setRefreshMsg({ type: 'success', text: `已更新 ${json.oddLotCount} 筆零股 + ${json.giftCount} 筆紀念品，重新整理頁面...` })
+          setTimeout(() => window.location.reload(), 1200)
+        }
       } else {
         setRefreshMsg({ type: 'error', text: json.error || '更新失敗' })
       }
@@ -700,7 +709,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
           </div>
           <div>
             <div className="text-xs text-[var(--text-secondary)] mb-0.5">
-              最新開盤日 {latestDate ? `(${formatTradingDayWithWeekday(latestDate)})` : ''} 成交總金額
+              最新盤後交易日 {latestDate ? `(${formatTradingDayWithWeekday(latestDate)})` : ''} 盤後零股成交總金額
             </div>
             <div className="text-base md:text-lg font-mono font-bold text-white">
               {(() => {
@@ -717,7 +726,7 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
           </div>
           <div>
             <div className="text-xs text-[var(--text-secondary)] mb-0.5">
-              最新開盤日 {latestDate ? `(${formatTradingDayWithWeekday(latestDate)})` : ''} 成交總股數
+              最新盤後交易日 {latestDate ? `(${formatTradingDayWithWeekday(latestDate)})` : ''} 盤後零股成交總股數
             </div>
             <div className="text-base md:text-lg font-mono font-bold text-white">
               {(() => {
