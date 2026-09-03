@@ -3,6 +3,7 @@ import './globals.css'
 import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 import { getCurrentUserFromCookies } from '@/lib/auth'
+import { LanguageProvider } from '@/i18n/LanguageProvider'
 
 export const metadata: Metadata = {
   title: 'Vestential',
@@ -21,11 +22,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     : null
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="zh-TW" suppressHydrationWarning>
       <body className="antialiased min-h-screen flex flex-col">
-        <Header initialUser={initialUser} />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <LanguageProvider>
+          <Header initialUser={initialUser} />
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </LanguageProvider>
       </body>
     </html>
   )

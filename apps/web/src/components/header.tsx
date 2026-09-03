@@ -4,13 +4,16 @@ import { TrendingUp, LogOut, User, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { useI18n } from '@/i18n/LanguageProvider'
+import { LanguageSwitcher } from '@/i18n/LanguageSwitcher'
+import type { Dict } from '@/i18n/dictionaries'
 
-const navItems = [
-  { label: '首頁', href: '/' },
-  { label: '分析', href: '/analyze' },
-  { label: '零股情報', href: '/odd-lot' },
-  { label: '個人損益', href: '/portfolio' },
-  { label: '回測', href: '/backtest' },
+const navItems: { key: keyof Dict['nav']; href: string }[] = [
+  { key: 'home', href: '/' },
+  { key: 'analyze', href: '/analyze' },
+  { key: 'oddLot', href: '/odd-lot' },
+  { key: 'portfolio', href: '/portfolio' },
+  { key: 'backtest', href: '/backtest' },
 ]
 
 export interface HeaderUser {
@@ -23,6 +26,7 @@ export interface HeaderUser {
 export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { dict } = useI18n()
   const [user, setUser] = useState<HeaderUser | null>(initialUser)
   const [remaining, setRemaining] = useState<number | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -79,11 +83,13 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5'
                   }`}
                 >
-                  {item.label}
+                  {dict.nav[item.key]}
                 </Link>
               )
             })}
           </nav>
+
+          <LanguageSwitcher />
 
           {user ? (
             <div className="relative">
@@ -120,7 +126,7 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
                       {typeof remaining === 'number' && (
                         <div className="flex items-center gap-1 mt-2 text-xs text-[var(--accent)]">
                           <Zap className="w-3.5 h-3.5" />
-                          今日剩餘 AI 分析次數：{remaining}
+                          {dict.common.quotaRemaining}{remaining}
                         </div>
                       )}
                     </div>
@@ -130,14 +136,14 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
                       className="flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition"
                     >
                       <User className="w-4 h-4" />
-                      我的分析
+                      {dict.common.myAnalysis}
                     </Link>
                     <button
                       onClick={handleLogout}
                       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-white/5 transition"
                     >
                       <LogOut className="w-4 h-4" />
-                      登出
+                      {dict.common.logout}
                     </button>
                   </div>
                 </>
@@ -148,7 +154,7 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
               href="/login"
               className="px-3 py-2 text-sm rounded-lg bg-[var(--accent)] text-white font-medium hover:opacity-90 transition"
             >
-              登入
+              {dict.common.login}
             </Link>
           )}
         </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import { useI18n } from '@/i18n/LanguageProvider'
 
 const GoogleIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">
@@ -23,6 +24,7 @@ const LineIcon = () => (
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { dict } = useI18n()
   const redirect = searchParams.get('redirect') || '/'
   const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
 
@@ -51,10 +53,10 @@ function LoginContent() {
         router.replace(safeRedirect)
       } else {
         const body = await res.json().catch(() => ({}))
-        setCheckError(body.error || '本機登入失敗')
+        setCheckError(body.error || dict.login.devLoginError)
       }
     } catch (e: any) {
-      setCheckError(e.message || '本機登入失敗')
+      setCheckError(e.message || dict.login.devLoginError)
     } finally {
       setDevLoggingIn(false)
     }
@@ -63,7 +65,7 @@ function LoginContent() {
   if (checking) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-sm text-[var(--text-secondary)]">
-        檢查登入狀態...
+        {dict.login.checking}
       </div>
     )
   }
@@ -72,9 +74,9 @@ function LoginContent() {
     <div className="min-h-[60vh] flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-[var(--bg-card)] rounded-2xl border border-white/5 p-8">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-1">登入 Vestential</h1>
+          <h1 className="text-2xl font-bold mb-1">{dict.login.title}</h1>
           <p className="text-sm text-[var(--text-secondary)]">
-            登入後即可使用 AI 分析（每日 3 次額度）
+            {dict.login.subtitle}
           </p>
         </div>
 
@@ -84,14 +86,14 @@ function LoginContent() {
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-white text-gray-800 font-medium text-sm hover:bg-gray-100 transition"
           >
             <GoogleIcon />
-            使用 Google 帳號登入
+            {dict.login.google}
           </a>
           <a
             href={loginUrl('line')}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-[#06C755] text-white font-medium text-sm hover:bg-[#05b84d] transition"
           >
             <LineIcon />
-            使用 LINE 登入
+            {dict.login.line}
           </a>
           {process.env.NODE_ENV === 'development' && (
             <button
@@ -100,21 +102,21 @@ function LoginContent() {
               disabled={devLoggingIn}
               className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-white/10 text-white font-medium text-sm hover:bg-white/15 border border-white/10 transition"
             >
-              <span>⚡ 本機測試帳號登入 (dev)</span>
+              <span>{dict.login.devLogin}</span>
             </button>
           )}
         </div>
 
         <p className="mt-6 text-xs text-center text-[var(--text-secondary)]">
-          首次登入將自動建立帳號。<br />
-          未登入仍可瀏覽公開資訊與歷史分析紀錄。
+          {dict.login.note1}<br />
+          {dict.login.note2}
         </p>
         {checkError && (
           <div className="mt-4 text-center text-xs text-red-400">{checkError}</div>
         )}
         <div className="mt-4 text-center">
           <Link href="/" className="text-xs text-[var(--accent)] hover:underline">
-            返回首頁
+            {dict.common.backToHome}
           </Link>
         </div>
       </div>
@@ -123,10 +125,11 @@ function LoginContent() {
 }
 
 export default function LoginPage() {
+  const { dict } = useI18n()
   return (
     <Suspense fallback={
       <div className="min-h-[60vh] flex items-center justify-center text-sm text-[var(--text-secondary)]">
-        載入中...
+        {dict.common.loading}
       </div>
     }>
       <LoginContent />

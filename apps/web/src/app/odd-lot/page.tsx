@@ -8,6 +8,7 @@ import {
   formatTradingDayWithWeekday,
   isCurrentlyHolidayOrWeekend,
 } from '@/utils/taiwan-calendar'
+import { getDict } from '@/i18n/server'
 
 import SEEDED_ODD_LOTS from '@/data/seeded-odd-lots.json'
 
@@ -146,6 +147,8 @@ export default async function OddLotPage({
 
   const holidayInfo = isCurrentlyHolidayOrWeekend()
   const formattedLatestDate = formatTradingDayWithWeekday(latestDateStr)
+  const dict = await getDict()
+  const d = dict.oddLot
 
   return (
     <div className="w-full min-h-screen px-4 md:px-6 lg:px-8 py-8 space-y-8">
@@ -153,13 +156,13 @@ export default async function OddLotPage({
         <div>
           <div className="flex items-center gap-2.5 mb-1.5">
             <TrendingUp className="w-6 h-6 text-[var(--accent)]" />
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">台灣零股行情與股東會紀念品情報</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">{d.title}</h1>
           </div>
           <p className="text-sm text-[var(--text-secondary)]">
-            即時整合 TWSE 盤後零股交易數據(TWT53U)與股東會紀念品領取最後期限
+            {d.subtitle}
             {latestDateStr && (
               <span className="ml-2 font-medium text-[var(--accent)]">
-                · 最新盤後交易日：{formattedLatestDate}
+                · {d.latestTradingDay}{formattedLatestDate}
               </span>
             )}
           </p>
@@ -170,13 +173,13 @@ export default async function OddLotPage({
             <div className="bg-amber-500/10 border border-amber-500/30 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs text-amber-300">
               <Sparkles className="w-4 h-4 shrink-0 text-amber-400" />
               <span>
-                目前逢【{holidayInfo.reason}】，已自動顯示最新開市上班日價位
+                {d.holidayBanner.replace('{reason}', holidayInfo.reason ?? '')}
               </span>
             </div>
           )}
           <div className="bg-[var(--bg-card)] border border-white/10 px-4 py-2 rounded-xl flex items-center gap-2 text-xs">
             <Gift className="w-4 h-4 text-[var(--accent-green)]" />
-            <span>內建紀念品自動分類與篩選</span>
+            <span>{d.giftBadge}</span>
           </div>
         </div>
       </div>

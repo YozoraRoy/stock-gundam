@@ -1,12 +1,17 @@
-import Link from 'next/link'
+'use client'
 
-const footerLinks = [
-  { label: '隱私權政策', href: '/privacy' },
-  { label: '服務條款', href: '/terms' },
-  { label: '關於我們', href: '/about' },
+import Link from 'next/link'
+import { useI18n } from '@/i18n/LanguageProvider'
+import type { Dict } from '@/i18n/dictionaries'
+
+const footerLinks: { key: keyof Dict['footer']; href: string }[] = [
+  { key: 'privacy', href: '/privacy' },
+  { key: 'terms', href: '/terms' },
+  { key: 'about', href: '/about' },
 ]
 
 export function Footer() {
+  const { dict } = useI18n()
   return (
     <footer className="border-t border-white/5 mt-auto">
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -21,7 +26,7 @@ export function Footer() {
                 href={link.href}
                 className="hover:text-[var(--text-primary)] transition"
               >
-                {link.label}
+                {dict.footer[link.key]}
               </Link>
             ))}
           </nav>
