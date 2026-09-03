@@ -1,7 +1,46 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { TrendingUp, AlertTriangle, Newspaper, BarChart3, Target, Gauge, Languages, Settings2 } from 'lucide-react'
+import { TrendingUp, AlertTriangle, Newspaper, BarChart3, Target, Gauge, Languages, Settings2, HelpCircle } from 'lucide-react'
 import { AGENT_KEYS } from '@stock/core'
+
+/** 投行/基金評級的繁體中文標籤對照。 */
+const RATING_ZH: Record<string, string> = {
+  Buy: '買進',
+  Overweight: '增持',
+  Hold: '持平',
+  Underweight: '減持',
+  Sell: '賣出',
+}
+
+/** 綜合評級旁的「？」說明 tooltip：解釋每種評級代表的意思與建議動作。 */
+function RatingHelp() {
+  const rows = [
+    ['Buy', '買進', '強烈看好，積極買進'],
+    ['Overweight', '增持', '看好、優於大盤/同類，可加碼或提升持股比重'],
+    ['Hold', '持平', '中性，繼續持有但不加碼'],
+    ['Underweight', '減持', '看淡、劣於大盤，建議降低比重'],
+    ['Sell', '賣出', '強烈看壞，建議出清'],
+  ]
+  return (
+    <span className="relative inline-flex items-center ml-1.5 group/help">
+      <HelpCircle className="w-3.5 h-3.5 text-[var(--text-secondary)] cursor-help" />
+      <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 z-30 w-64 hidden group-hover/help:block p-3 rounded-lg bg-[var(--bg-card)] border border-white/10 shadow-xl text-[11px] leading-relaxed text-[var(--text-primary)] font-normal text-left">
+        <div className="font-semibold mb-1.5 text-[var(--text-secondary)]">投行/基金評級說明</div>
+        <ul className="space-y-1.5">
+          {rows.map(([en, zh, desc]) => (
+            <li key={en} className="flex items-start gap-1.5">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                <span className={`font-semibold ${RATING_COLORS[en] ?? ''}`}>{en}</span>
+                <span className="text-[var(--text-secondary)]">({zh})</span>
+              </span>
+              <span className="opacity-90">— {desc}</span>
+            </li>
+          ))}
+        </ul>
+      </span>
+    </span>
+  )
+}
 
 interface AgentUsage {
   agent: string
@@ -94,9 +133,14 @@ export function AnalysisCard({ analysis }: AnalysisCardProps) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Target className="w-5 h-5" />
-            <h2 className="text-lg font-semibold">綜合評級</h2>
+            <h2 className="text-lg font-semibold">綜合評級<RatingHelp /></h2>
           </div>
-          <span className={`text-2xl font-bold ${color}`}>{analysis.signal}</span>
+          <div className="flex items-baseline gap-2">
+            <span className={`text-2xl font-bold ${color}`}>{analysis.signal}</span>
+            {analysis.signal && RATING_ZH[analysis.signal] && (
+              <span className={`text-sm font-medium ${color}`}>({RATING_ZH[analysis.signal]})</span>
+            )}
+          </div>
         </div>
         <div className="prose prose-invert max-w-none text-sm">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
