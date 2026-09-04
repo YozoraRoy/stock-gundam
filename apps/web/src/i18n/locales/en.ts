@@ -85,7 +85,6 @@ export const en: Dict = {
     visionP1: 'Vestential combines investment methodology with the concept of market cycles to distill complex market information into a simple, quantifiable, and repeatable framework. Our goal is to help everyday investors better understand where the market stands and use that perspective as an information reference when considering their investment decisions.',
     visionP2: 'By combining quantitative signals, fractional-share investing, disciplined investing practices, and AI-assisted analysis, we aim to reduce reliance on emotion, luck, and hot tips. This gives working professionals and everyday investors\u2014especially those with limited time\u2014a simpler way to develop their own investment discipline, one step at a time.',
     visionP3: 'We believe investing doesn\u2019t have to be complicated. Understand the market. Find your rhythm. Keep building. Let time become a force behind long-term wealth creation.',
-    visionP4: 'The content provided by Vestential reflects investment ideas, methodologies, and analytical approaches for informational and reference purposes only. It does not constitute investment advice, an offer, or a recommendation to buy or sell any security or financial product. All investments involve risk, and past performance or analytical signals do not guarantee future results. Please make your own informed and careful investment decisions based on your financial situation, investment objectives, and risk tolerance.',
     methodTitle: 'Core Method: One Indicator, One Action',
     methodIntro: 'We believe simplicity breeds discipline, and discipline goes the distance. Every feature maps to an easy-to-understand indicator and a next step:',
     methodBias: 'judge whether it is a relatively good time to enter',
@@ -121,7 +120,7 @@ export const en: Dict = {
     openSourceTitle: 'Open Source',
     openSourceDesc: 'This project\u2019s source code is public on GitHub. Feedback and contributions are welcome.',
     disclaimerTitle: 'Disclaimer',
-    disclaimerDesc: 'All indicators and analysis shown on this platform are for reference only and do not constitute investment recommendations. All investing carries risk; decisions are yours to make, and this platform is not liable for any losses.',
+    disclaimerDesc: 'The content provided by Vestential reflects investment ideas, methodologies, and analytical approaches for informational and reference purposes only. It does not constitute investment advice, an offer, or a recommendation to buy or sell any security or financial product. All investments involve risk, and past performance or analytical signals do not guarantee future results. Please make your own informed and careful investment decisions based on your financial situation, investment objectives, and risk tolerance.',
   },
   login: {
     title: 'Sign in to Vestential',

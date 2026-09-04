@@ -27,12 +27,9 @@ export default async function AboutPage() {
 
         <section>
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-3">{d.visionTitle}</h2>
-          <p className="mb-4">{d.visionP1}</p>
+           <p className="mb-4">{d.visionP1}</p>
           <p className="mb-4">{d.visionP2}</p>
-          <p className="mb-3">{d.visionP3}</p>
-          <div className="mt-4 rounded-xl border border-[var(--accent-red)]/30 bg-[var(--accent-red)]/5 px-5 py-4">
-            <p className="leading-relaxed text-[var(--text-secondary)]">{d.visionP4}</p>
-          </div>
+          <p>{d.visionP3}</p>
         </section>
 
         <section>
@@ -94,9 +91,11 @@ export default async function AboutPage() {
           </p>
         </section>
 
-        <section>
+         <section>
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">{d.disclaimerTitle}</h2>
-          <p>{d.disclaimerDesc}</p>
+          <div className="rounded-xl border border-[var(--accent-red)]/30 bg-[var(--accent-red)]/5 px-5 py-4">
+            <p className="leading-relaxed text-[var(--text-secondary)]">{d.disclaimerDesc}</p>
+          </div>
         </section>
       </div>
       <div className="mt-8">

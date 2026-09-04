@@ -61,7 +61,6 @@ export interface Dict {
     visionP1: string
     visionP2: string
     visionP3: string
-    visionP4: string
     methodTitle: string
     methodIntro: string
     methodBias: string
