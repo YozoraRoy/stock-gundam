@@ -1322,6 +1322,8 @@ export interface IdentityInput {
   email?: string | null
   displayName?: string | null
   avatarUrl?: string | null
+  /** 是否以 email 綁定到既有使用者。預設 true（Google 等維持原行為）；LINE 設 false 以保持既有 Email 使用者登入方式不變。 */
+  mergeByEmail?: boolean
 }
 
 export interface QuotaResult {
@@ -1416,7 +1418,7 @@ export async function findOrCreateUser(input: IdentityInput): Promise<UserRow | 
       }
 
       let userId: number
-      if (input.email) {
+      if (input.email && input.mergeByEmail !== false) {
         const byEmail = await pool.request()
           .input('email', sql.NVarChar(255), input.email)
           .query('SELECT id FROM users WHERE email = @email')
@@ -1432,9 +1434,10 @@ export async function findOrCreateUser(input: IdentityInput): Promise<UserRow | 
         }
       } else {
         const ins = await pool.request()
+          .input('email', sql.NVarChar(255), input.email ?? null)
           .input('name', sql.NVarChar(100), input.displayName ?? null)
           .input('avatar', sql.NVarChar(500), input.avatarUrl ?? null)
-          .query(`INSERT INTO users (email, display_name, avatar_url) VALUES (NULL, @name, @avatar); SELECT SCOPE_IDENTITY() AS id`)
+          .query(`INSERT INTO users (email, display_name, avatar_url) VALUES (@email, @name, @avatar); SELECT SCOPE_IDENTITY() AS id`)
         userId = Number(ins.recordset[0]?.id ?? -1)
       }
 
@@ -1472,7 +1475,7 @@ export async function findOrCreateUser(input: IdentityInput): Promise<UserRow | 
     }
 
     let userId: number
-    if (input.email) {
+    if (input.email && input.mergeByEmail !== false) {
       const byEmail = db.prepare('SELECT id FROM users WHERE email = ?').get(input.email) as { id: number } | undefined
       if (byEmail) {
         userId = byEmail.id
@@ -1480,7 +1483,7 @@ export async function findOrCreateUser(input: IdentityInput): Promise<UserRow | 
         userId = Number(db.prepare('INSERT INTO users (email, display_name, avatar_url) VALUES (?, ?, ?)').run(input.email, input.displayName ?? null, input.avatarUrl ?? null).lastInsertRowid)
       }
     } else {
-      userId = Number(db.prepare('INSERT INTO users (email, display_name, avatar_url) VALUES (?, ?, ?)').run(null, input.displayName ?? null, input.avatarUrl ?? null).lastInsertRowid)
+      userId = Number(db.prepare('INSERT INTO users (email, display_name, avatar_url) VALUES (?, ?, ?)').run(input.email ?? null, input.displayName ?? null, input.avatarUrl ?? null).lastInsertRowid)
     }
 
     if (userId > 0) {

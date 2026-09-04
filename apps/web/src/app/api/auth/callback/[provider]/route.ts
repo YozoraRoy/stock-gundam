@@ -34,18 +34,19 @@ export async function GET(
   try {
     const baseUrl = getAuthBaseUrl(req)
     const redirectUri = `${baseUrl}/api/auth/callback/${authProvider}`
-    const { accessToken } = await exchangeProviderCode(authProvider, {
+    const { accessToken, idToken } = await exchangeProviderCode(authProvider, {
       code,
       redirectUri,
       codeVerifier: oauthState.codeVerifier,
     })
-    const profile = await fetchProviderProfile(authProvider, accessToken)
+    const profile = await fetchProviderProfile(authProvider, accessToken, idToken)
     const user = await findOrCreateUser({
       provider: authProvider,
       providerUserId: profile.providerUserId,
       email: profile.email ?? undefined,
       displayName: profile.displayName ?? undefined,
       avatarUrl: profile.avatarUrl ?? undefined,
+      mergeByEmail: authProvider === 'google',
     })
     if (!user) {
       throw new Error('failed to create or find user')

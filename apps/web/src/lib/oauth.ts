@@ -126,7 +126,7 @@ export function buildProviderAuthUrl(
     url.searchParams.set('access_type', 'online')
     url.searchParams.set('prompt', 'select_account')
   } else {
-    url.searchParams.set('scope', 'openid profile')
+    url.searchParams.set('scope', 'openid profile email')
   }
   return url.toString()
 }
@@ -158,9 +158,23 @@ export async function exchangeProviderCode(
   return { accessToken: json.access_token, idToken: json.id_token }
 }
 
+/** 解碼 OpenID Connect ID token (JWT) 的 payload，取回 email 等 claim。非嚴謹驗證，僅用於讀取 provider 回傳的 email。 */
+function decodeIdTokenPayload(idToken?: string): Record<string, unknown> | null {
+  if (!idToken) return null
+  try {
+    const parts = idToken.split('.')
+    if (parts.length !== 3) return null
+    const json = Buffer.from(parts[1], 'base64url').toString('utf8')
+    return JSON.parse(json) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
 export async function fetchProviderProfile(
   provider: AuthProvider,
   accessToken: string,
+  idToken?: string,
 ): Promise<OAuthProfile> {
   if (provider === 'google') {
     const res = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
@@ -185,10 +199,25 @@ export async function fetchProviderProfile(
   if (!res.ok) throw new Error(`LINE profile failed (${res.status})`)
   const j = (await res.json()) as { userId?: string; displayName?: string; pictureUrl?: string }
   if (!j.userId) throw new Error('LINE profile missing userId')
+  let email: string | null = null
+  // 開關：LINE_EMAIL_ENABLED='false' 時完全不讀取 LINE email（即使 Console 已核准）。
+  // 預設啟用，並以「實際 ID token 是否有 email」為準，自動偵測，不需手動切換。
+  if (process.env.LINE_EMAIL_ENABLED !== 'false') {
+    const payload = decodeIdTokenPayload(idToken)
+    const decoded = typeof payload?.email === 'string' ? payload.email : null
+    email = decoded ? decoded : null
+    if (decoded) {
+      console.log('[OAuth] LINE email received from ID token. Console Email permission is confirmed granted.')
+    } else {
+      console.error('[OAuth] LINE email NOT in ID token. If Email permission was just approved, ensure LINE Channel verification status is "verified" and permission is granted.')
+    }
+  } else {
+    console.error('[OAuth] LINE email reading is disabled via LINE_EMAIL_ENABLED=false')
+  }
   return {
     provider,
     providerUserId: String(j.userId),
-    email: null,
+    email,
     displayName: j.displayName ?? null,
     avatarUrl: j.pictureUrl ?? null,
   }
