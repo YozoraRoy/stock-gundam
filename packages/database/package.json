@@ -18,7 +18,8 @@
     "db:generate-migrations": "node scripts/generate-migrations.mjs",
     "sync:mops": "npx tsx src/sync-mops.ts",
     "sync:mops:missing": "npx tsx src/sync-mops.ts --missing-only",
-    "sync:validate-gifts": "npx tsx src/sync-validate-gifts.ts"
+    "sync:validate-gifts": "npx tsx src/sync-validate-gifts.ts",
+    "recover-online": "npx tsx src/recover-online.ts"
   },
   "dependencies": {
     "@stock/core": "*",

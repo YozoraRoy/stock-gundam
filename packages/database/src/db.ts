@@ -618,27 +618,35 @@ async function ensureSeedDataAzure(): Promise<number> {
   if (cnt < 50) {
     console.log(`[AzureSQL] Seeding ${SEED_TRADES.length} trades and ${SEED_GIFTS.length} gifts...`)
 
-    for (let i = 0; i < SEED_TRADES.length; i += batchSize) {
-      const batch = SEED_TRADES.slice(i, i + batchSize)
-      const req = pool.request()
-      const values: string[] = []
-      batch.forEach((t, idx) => {
-        const p = `t${idx}`
-        values.push(`(@${p}_date, @${p}_sid, @${p}_sname, @${p}_price, @${p}_vol, @${p}_bp, @${p}_bv, @${p}_ap, @${p}_av)`)
-        req.input(`${p}_date`, sql.NVarChar(20), t.date)
-        req.input(`${p}_sid`, sql.NVarChar(20), t.stock_id)
-        req.input(`${p}_sname`, sql.NVarChar(100), t.stock_name)
-        req.input(`${p}_price`, sql.Float, t.price)
-        req.input(`${p}_vol`, sql.Int, t.volume)
-        req.input(`${p}_bp`, sql.Float, t.bid_price)
-        req.input(`${p}_bv`, sql.Int, t.bid_volume)
-        req.input(`${p}_ap`, sql.Float, t.ask_price)
-        req.input(`${p}_av`, sql.Int, t.ask_volume)
-      })
-      await req.query(`
-        INSERT INTO odd_lot_trades (date, stock_id, stock_name, price, volume, bid_price, bid_volume, ask_price, ask_volume)
-        VALUES ${values.join(',')}
-      `)
+    try {
+      for (let i = 0; i < SEED_TRADES.length; i += batchSize) {
+        const batch = SEED_TRADES.slice(i, i + batchSize)
+        const req = pool.request()
+        const values: string[] = []
+        batch.forEach((t, idx) => {
+          const p = `t${idx}`
+          values.push(`(@${p}_date, @${p}_sid, @${p}_sname, @${p}_price, @${p}_vol, @${p}_bp, @${p}_bv, @${p}_ap, @${p}_av)`)
+          req.input(`${p}_date`, sql.NVarChar(20), t.date)
+          req.input(`${p}_sid`, sql.NVarChar(20), t.stock_id)
+          req.input(`${p}_sname`, sql.NVarChar(100), t.stock_name)
+          req.input(`${p}_price`, sql.Float, t.price)
+          req.input(`${p}_vol`, sql.Int, t.volume)
+          req.input(`${p}_bp`, sql.Float, t.bid_price)
+          req.input(`${p}_bv`, sql.Int, t.bid_volume)
+          req.input(`${p}_ap`, sql.Float, t.ask_price)
+          req.input(`${p}_av`, sql.Int, t.ask_volume)
+        })
+        await req.query(`
+          INSERT INTO odd_lot_trades (date, stock_id, stock_name, price, volume, bid_price, bid_volume, ask_price, ask_volume)
+          VALUES ${values.join(',')}
+        `)
+      }
+    } catch (e: any) {
+      if (e.number === 2627) {
+        console.log('[AzureSQL] Trades already seeded (duplicate key), skipping')
+      } else {
+        throw e
+      }
     }
 
     for (let i = 0; i < SEED_GIFTS.length; i += batchSize) {
