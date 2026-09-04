@@ -22,7 +22,7 @@ export const ja: Dict = {
   },
   nav: {
     home: 'ホーム',
-    analyze: '分析',
+    analyze: 'AI スマート分析',
     oddLot: '端株情報',
     portfolio: '損益',
     backtest: 'サイクル参入モデル',
@@ -409,7 +409,7 @@ export const ja: Dict = {
     placeholder: '台湾の証券コードまたは名前を入力（例 2330 / TSMC）',
     btnBacktest: 'サイクル参入モデルを実行',
     btnBacktesting: '予測中...',
-    btnTopVolume: 'Top 10 出来高',
+    btnTopVolume: 'Top 20 出来高',
     loadingData: '{years} 年分のデータを取得し、パラメータ最適化を実行中...',
     belowTargetWarning: '閾値のいずれも 75% 勝率目標に達しませんでした。歴史上の最高勝率結果を参考として表示します。',
     statBestBias: '最適参入乖離率',

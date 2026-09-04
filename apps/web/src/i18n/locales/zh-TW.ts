@@ -22,7 +22,7 @@ export const zhTW: Dict = {
   },
   nav: {
     home: '首頁',
-    analyze: 'Ai分析',
+    analyze: 'AI 智能分析',
     oddLot: '零股情報',
     portfolio: '個人損益',
     backtest: '週期進場模型預估',
@@ -409,7 +409,7 @@ export const zhTW: Dict = {
     placeholder: '輸入台股代號或名稱，如 2330 / 台積電',
     btnBacktest: '開始週期進場模型預估',
     btnBacktesting: '預估中...',
-    btnTopVolume: 'Top 10 成交量',
+    btnTopVolume: 'Top 20 成交量',
     loadingData: '抓取 {years} 年歷史資料並執行參數尋優...',
     belowTargetWarning: '無任何進場閾值達到 75% 勝率目標，以下為歷史勝率最高的結果，僅供參考。',
     statBestBias: '最佳進場乖離率',

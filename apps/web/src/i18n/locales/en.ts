@@ -22,7 +22,7 @@ export const en: Dict = {
   },
   nav: {
     home: 'Home',
-    analyze: 'Analyze',
+    analyze: 'AI Smart Analysis',
     oddLot: 'Odd Lots',
     portfolio: 'Portfolio',
     backtest: 'Cycle Entry Model',
@@ -409,7 +409,7 @@ export const en: Dict = {
     placeholder: 'Enter Taiwan stock code or name, e.g. 2330 / TSMC',
     btnBacktest: 'Run Cycle Entry Model',
     btnBacktesting: 'Estimating...',
-    btnTopVolume: 'Top 10 Volume',
+    btnTopVolume: 'Top 20 Volume',
     loadingData: 'Fetching {years} years of data and running parameter optimization...',
     belowTargetWarning: 'No entry threshold reached the 75% win-rate target. Showing the highest historical win-rate results for reference only.',
     statBestBias: 'Best Entry Deviation',

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { BarChart3, Brain, Search as SearchIcon, Clock, History, FileText, ChevronRight, Target, RefreshCw, Trash2, Zap } from 'lucide-react'
 import { AGENT_KEYS, type AnalysisLanguage } from '@stock/core'
 import { SearchBar } from '@/components/search-bar'
@@ -32,11 +32,13 @@ interface AnalysisRecord {
 }
 
 function AnalyzeContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const symbolParam = searchParams.get('symbol') || searchParams.get('stock_id') || ''
   const { locale: language, setLocale: setLanguage, dict } = useI18n()
   const ui = dict.analyzePage
 
+  const [authChecking, setAuthChecking] = useState(true)
   const [analysis, setAnalysis] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -54,15 +56,34 @@ function AnalyzeContent() {
   const abortRef = useRef<AbortController | null>(null)
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // 讀取目前使用者是否為管理者（LINE 帳號 Roy）
+  // 驗證登入狀態：未登入者直接導向登入頁面
   useEffect(() => {
+    let cancelled = false
     fetch('/api/auth/me')
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
-        if (data?.success && data.user) setIsAdmin(!!data.user.isAdmin)
+        if (cancelled) return
+        if (!data?.success || !data?.user) {
+          const currentPath = typeof window !== 'undefined'
+            ? window.location.pathname + window.location.search
+            : '/analyze'
+          router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`)
+          return
+        }
+        setIsAdmin(!!data.user.isAdmin)
+        setAuthChecking(false)
       })
-      .catch(() => {})
-  }, [])
+      .catch(() => {
+        if (cancelled) return
+        const currentPath = typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search
+          : '/analyze'
+        router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [router])
 
   // 從 model_usage JSON 計算該筆分析消耗的總 token 數
   // 舊紀錄 model_usage 可能為空，但完整報告內可能存有 tokenUsage，一併回退讀取
@@ -118,8 +139,9 @@ function AnalyzeContent() {
   }, [symbolParam])
 
   useEffect(() => {
+    if (authChecking) return
     fetchHistory(symbolParam)
-  }, [fetchHistory, symbolParam])
+  }, [fetchHistory, symbolParam, authChecking])
 
   // LLM 重試倒數計時器
   useEffect(() => {
@@ -302,6 +324,22 @@ function AnalyzeContent() {
       return 'bg-rose-500/20 text-rose-400 border-rose-500/30'
     }
     return 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+  }
+
+  if (authChecking) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-24 text-center">
+        <div className="inline-flex flex-col items-center justify-center p-8 rounded-2xl bg-[var(--bg-card)] border border-white/5 shadow-xl">
+          <RefreshCw className="w-8 h-8 text-[var(--accent)] animate-spin mb-4" />
+          <p className="text-base font-medium text-[var(--text-primary)] mb-1">
+            {dict.common?.loading || '載入中...'}
+          </p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            驗證會員登入狀態中...
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -1642,23 +1642,51 @@ export async function searchStocksByName(keyword: string): Promise<Array<{ stock
   const trimmed = keyword.trim()
   if (!trimmed) return []
   const kw = `%${trimmed}%`
+  const prefix = `${trimmed}%`
+  // 1. 優先查詢 odd_lot_trades 表（涵蓋上市上櫃與 ETF，名稱最標準最新）
+  // 支援同時比對 stock_name 或 stock_id；且排除少數 stock_name 純為代號的紀錄以取得正式中文
   const rows = await dbQueryAll(
     `SELECT stock_id, stock_name FROM odd_lot_trades
-     WHERE stock_name LIKE @kw
+     WHERE (stock_name LIKE @kw OR stock_id LIKE @kw)
+       AND stock_name != stock_id
      GROUP BY stock_id, stock_name
-     ORDER BY CASE WHEN stock_name = @exact THEN 0 ELSE 1 END, stock_id
+     ORDER BY CASE 
+       WHEN stock_id = @exact THEN 0 
+       WHEN stock_name = @exact THEN 1 
+       WHEN stock_id LIKE @prefix THEN 2
+       WHEN stock_name LIKE @prefix THEN 3
+       ELSE 4 
+     END, stock_id
+     LIMIT 15`,
+    { kw, exact: trimmed, prefix },
+  )
+  if (rows.length) return rows as Array<{ stock_id: string; stock_name: string }>
+
+  // 2. 備援查詢股東會紀念品表 shareholder_gifts
+  const gifts = await dbQueryAll(
+    `SELECT DISTINCT stock_id, stock_name FROM shareholder_gifts
+     WHERE stock_name LIKE @kw OR stock_id LIKE @kw
+     ORDER BY CASE 
+       WHEN stock_id = @exact THEN 0 
+       WHEN stock_name = @exact THEN 1 
+       WHEN stock_id LIKE @prefix THEN 2
+       ELSE 3 
+     END, stock_id
+     LIMIT 15`,
+    { kw, exact: trimmed, prefix },
+  )
+  if (gifts.length) return gifts as Array<{ stock_id: string; stock_name: string }>
+
+  // 3. 若皆無正式中文，最後容許 stock_name == stock_id 的保底紀錄
+  const fallbackRows = await dbQueryAll(
+    `SELECT stock_id, stock_name FROM odd_lot_trades
+     WHERE stock_name LIKE @kw OR stock_id LIKE @kw
+     GROUP BY stock_id, stock_name
+     ORDER BY CASE WHEN stock_id = @exact THEN 0 ELSE 1 END, stock_id
      LIMIT 15`,
     { kw, exact: trimmed },
   )
-  if (rows.length) return rows as Array<{ stock_id: string; stock_name: string }>
-  const gifts = await dbQueryAll(
-    `SELECT DISTINCT stock_id, stock_name FROM shareholder_gifts
-     WHERE stock_name LIKE @kw
-     ORDER BY stock_id
-     LIMIT 15`,
-    { kw },
-  )
-  return gifts as Array<{ stock_id: string; stock_name: string }>
+  return fallbackRows as Array<{ stock_id: string; stock_name: string }>
 }
 
 /**

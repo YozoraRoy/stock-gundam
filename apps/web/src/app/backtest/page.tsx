@@ -1134,60 +1134,74 @@ export default function BacktestPage() {
           onClick={() => setShowTop(false)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-[var(--bg-card)] border border-white/10 shadow-2xl overflow-hidden"
+            className="w-full max-w-2xl sm:max-w-3xl rounded-2xl bg-[var(--bg-card)] border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
               <div className="flex items-center gap-2">
                 <ListOrdered className="w-5 h-5 text-[var(--accent)]" />
                 <h2 className="text-base font-bold">{ui.topModalTitle}</h2>
               </div>
               <button
                 onClick={() => setShowTop(false)}
-                className="p-1.5 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]"
+                className="p-1.5 rounded-lg hover:bg-white/5 text-[var(--text-secondary)] transition"
                 aria-label={ui.topCloseAria}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex gap-1.5 px-5 pt-4">
-              {(
-                [
-                  ['day', ui.topRangeDay],
-                  ['week', ui.topRangeWeek],
-                  ['month', ui.topRangeMonth],
-                  ['quarter', ui.topRangeQuarter],
-                ] as [TopVolumeRange, string][]
-              ).map(([r, label]) => (
-                <button
-                  key={r}
-                  onClick={() => void loadTop(r)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                    topRange === r
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2 shrink-0">
+              <div className="flex gap-1.5">
+                {(
+                  [
+                    ['day', ui.topRangeDay],
+                    ['week', ui.topRangeWeek],
+                    ['month', ui.topRangeMonth],
+                    ['quarter', ui.topRangeQuarter],
+                  ] as [TopVolumeRange, string][]
+                ).map(([r, label]) => (
+                  <button
+                    key={r}
+                    onClick={() => void loadTop(r)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      topRange === r
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-xs text-[var(--text-secondary)] hidden sm:block">
+                點擊任一標的即可自動帶入回測
+              </div>
             </div>
 
-            <div className="px-5 py-4">
+            {/* 欄位表頭 */}
+            <div className="px-5 py-2 border-b border-white/5 text-[11px] text-[var(--text-secondary)] font-medium grid grid-cols-12 gap-2 shrink-0">
+              <div className="col-span-1 text-center">#</div>
+              <div className="col-span-2">代號</div>
+              <div className="col-span-4 sm:col-span-4">股票名稱</div>
+              <div className="col-span-2 text-right">成交量</div>
+              <div className="col-span-3 text-right">週期模型預估</div>
+            </div>
+
+            <div className="px-3 sm:px-5 py-2 flex-1 overflow-y-auto">
               {topLoading ? (
-                <div className="py-10 text-center text-[var(--text-secondary)]">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
-                  {topRange === 'day' ? ui.topLoadingDay : ui.topLoadingOther}
+                <div className="py-12 text-center text-[var(--text-secondary)]">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--accent)]" />
+                  <p className="text-sm">{topRange === 'day' ? ui.topLoadingDay : ui.topLoadingOther}</p>
                 </div>
               ) : topError ? (
-                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                <div className="my-4 p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                   {topError}
                 </div>
               ) : topList.length === 0 ? (
-                <div className="py-10 text-center text-[var(--text-secondary)] text-sm">{ui.topNoData}</div>
+                <div className="py-12 text-center text-[var(--text-secondary)] text-sm">{ui.topNoData}</div>
               ) : (
-                <div className="max-h-96 overflow-y-auto">
+                <div className="space-y-1">
                   {topList.map((item) => {
                     const insight = topInsights[item.symbol]
                     const ready = insight && insight !== 'loading' && insight !== 'error'
@@ -1207,25 +1221,29 @@ export default function BacktestPage() {
                       <button
                         key={item.symbol}
                         onClick={() => pickTopStock(item)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition text-left ${
+                        className={`w-full grid grid-cols-12 gap-2 items-center px-3 py-2.5 rounded-xl hover:bg-white/5 transition text-left ${
                           insightReached
                             ? 'bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20'
-                            : ''
+                            : 'border border-transparent'
                         }`}
                       >
-                        <span className="w-6 shrink-0 text-center font-mono text-xs text-[var(--text-secondary)]">
+                        <span className="col-span-1 text-center font-mono text-xs text-[var(--text-secondary)]">
                           {item.rank}
                         </span>
-                        <span className="font-mono text-sm text-[var(--accent)] w-16 shrink-0">{item.symbol}</span>
-                        <span className="flex-1 min-w-0 text-sm text-[var(--text-primary)] truncate">{item.name}</span>
-                        <div className="shrink-0 text-right">
-                          <div className="text-sm text-[var(--text-primary)] font-medium tabular-nums">
-                            {fmtVolume(item.volume, ui.volumeUnitBillion, ui.volumeUnitTenThousand)}
-                          </div>
+                        <span className="col-span-2 font-mono text-sm font-bold text-[var(--accent)]">
+                          {item.symbol}
+                        </span>
+                        <span className="col-span-4 font-medium text-sm text-[var(--text-primary)] truncate">
+                          {item.name}
+                        </span>
+                        <div className="col-span-2 text-right text-sm text-[var(--text-primary)] font-medium tabular-nums">
+                          {fmtVolume(item.volume, ui.volumeUnitBillion, ui.volumeUnitTenThousand)}
+                        </div>
+                        <div className="col-span-3 text-right">
                           {insight === 'loading' ? (
                             <div className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] justify-end">
                               <RefreshCw className="w-3 h-3 animate-spin" />
-                              {ui.topLoadingThreshold}
+                              <span className="hidden sm:inline">{ui.topLoadingThreshold}</span>
                             </div>
                           ) : insight === 'error' ? (
                             <div className="text-[11px] text-[var(--text-secondary)]">—</div>
@@ -1234,11 +1252,13 @@ export default function BacktestPage() {
                               {insightReached ? (
                                 <span className="inline-flex items-center gap-1 text-[var(--accent-green)] font-semibold">
                                   <Zap className="w-3 h-3" />
-                                  {ui.topReachedThreshold.replace('{threshold}', fmtPct(insight.bestThreshold != null ? insight.bestThreshold / 100 : 0))} · {ui.topEntryZone}
+                                  <span>{fmtPct(insight.bestThreshold != null ? insight.bestThreshold / 100 : 0)}</span>
+                                  <span className="hidden sm:inline">· {ui.topEntryZone}</span>
                                 </span>
                               ) : insightDistance != null && insight.bestThreshold != null ? (
                                 <span className="text-[var(--text-secondary)]">
-                                  {ui.topThreshold.replace('{threshold}', fmtPct(insight.bestThreshold / 100))} · {ui.topDistance.replace('{pct}', insightDistance.toFixed(1))}
+                                  <span>{fmtPct(insight.bestThreshold / 100)}</span>
+                                  <span className="hidden sm:inline"> (距 {insightDistance.toFixed(1)}%)</span>
                                 </span>
                               ) : (
                                 <span className="text-[var(--text-secondary)]">{ui.topInsufficientData}</span>
@@ -1253,7 +1273,7 @@ export default function BacktestPage() {
               )}
             </div>
 
-            <div className="px-5 pb-4 text-xs text-[var(--text-secondary)]">
+            <div className="px-5 py-3 border-t border-white/5 text-xs text-[var(--text-secondary)] shrink-0">
               {ui.topFooterHint}
             </div>
           </div>
