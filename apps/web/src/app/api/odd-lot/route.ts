@@ -23,7 +23,8 @@ export async function GET(req: Request) {
 
     const gift = await dbQueryFirst(`
       SELECT stock_id, stock_name, meeting_date, last_buy_date, gift_name, distribution_method,
-             gift_status, claim_rule, claim_rule_source, mops_gift_text
+             gift_status, claim_rule, claim_rule_source, mops_gift_text,
+             validation_status, validation_reason, twse_meeting_date
       FROM shareholder_gifts
       WHERE stock_id = @stock_id
       ORDER BY meeting_date DESC
@@ -45,11 +46,13 @@ export async function GET(req: Request) {
     SELECT t.date, t.stock_id, t.stock_name, t.price, t.volume,
            t.bid_price, t.bid_volume, t.ask_price, t.ask_volume,
            g.gift_name, g.meeting_date, g.distribution_method,
-           g.last_buy_date, g.gift_status, g.claim_rule, g.claim_rule_source, g.mops_gift_text
+           g.last_buy_date, g.gift_status, g.claim_rule, g.claim_rule_source, g.mops_gift_text,
+           g.validation_status, g.validation_reason, g.twse_meeting_date
     FROM odd_lot_trades t
     LEFT JOIN (
       SELECT stock_id, gift_name, meeting_date, distribution_method, last_buy_date,
              gift_status, claim_rule, claim_rule_source, mops_gift_text,
+             validation_status, validation_reason, twse_meeting_date,
              ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY meeting_date DESC) AS rn
       FROM shareholder_gifts
     ) g ON g.stock_id = t.stock_id AND g.rn = 1

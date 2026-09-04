@@ -47,6 +47,9 @@ export interface OddLotItem {
   claim_rule?: string | null
   claim_rule_source?: string | null
   mops_gift_text?: string | null
+  validation_status?: string | null
+  validation_reason?: string | null
+  twse_meeting_date?: string | null
 }
 
 export type GiftCategory = 'ALL' | 'EGIFT' | 'CARD' | 'KITCHEN' | 'CARE' | 'LIFESTYLE' | 'PENDING' | 'NO_GIFT' | 'OTHER'
@@ -196,6 +199,32 @@ export function getMonthDayWeight(dateStr?: string | null): number {
   return month * 100 + day
 }
 
+/**
+ * 「最新日期優先」：在 stock.gift 日期與 TWSE 官方日期之間，擇較新者作為有效股東會日期。
+ * 回傳顯示用的月份日（MM/DD）與是否採用官方(TWSE)日期。
+ */
+export function getEffectiveMeetingDate(
+  meetingDate?: string | null,
+  twseMeetingDate?: string | null,
+): { date: string | null; source: 'stockgift' | 'twse' } {
+  const stockWeight = getMonthDayWeight(meetingDate)
+  const twseWeight = getMonthDayWeight(twseMeetingDate)
+
+  const twseDate: string | null = twseMeetingDate && twseWeight >= 0 ? twseMeetingDate : null
+  const stockDate: string | null = meetingDate && stockWeight >= 0 ? meetingDate : null
+
+  if (twseWeight >= 0 && twseWeight > stockWeight) {
+    return { date: twseDate, source: 'twse' }
+  }
+  if (stockWeight >= 0) {
+    return { date: stockDate, source: 'stockgift' }
+  }
+  if (twseWeight >= 0) {
+    return { date: twseDate, source: 'twse' }
+  }
+  return { date: null, source: 'stockgift' }
+}
+
 export function formatCpRatio(ratio: number): { label: string; badgeClass: string } {
   if (ratio <= 0) return { label: '—', badgeClass: 'text-white/30' }
   const pct = Math.round(ratio * 100)
@@ -303,6 +332,23 @@ export function getOddLotRestriction(
     label: ui?.restrictAgentClaimable ?? '✅ 零股可代領',
     badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
     source: '推估',
+  }
+}
+
+export function getValidationBadge(
+  status?: string | null,
+  ui?: {
+    validationOk?: string; validationNoGift?: string; validationDateMismatch?: string;
+    validationGiftConflict?: string; validationUnverified?: string;
+  },
+): { icon: string; label: string; badgeClass: string } | null {
+  switch (status) {
+    case 'OK': return { icon: '✅', label: ui?.validationOk ?? '已驗證', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' }
+    case 'NO_GIFT': return { icon: '➖', label: ui?.validationNoGift ?? '未發放', badgeClass: 'bg-white/5 text-white/40 border-white/15' }
+    case 'DATE_MISMATCH': return { icon: '⚠️', label: ui?.validationDateMismatch ?? '日期不符', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40' }
+    case 'GIFT_CONFLICT': return { icon: '🚨', label: ui?.validationGiftConflict ?? '贈品衝突', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40' }
+    case 'UNVERIFIED': return { icon: '⏳', label: ui?.validationUnverified ?? '未驗證', badgeClass: 'bg-slate-500/20 text-slate-300 border-slate-500/30' }
+    default: return null
   }
 }
 
@@ -1072,6 +1118,18 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                         ) : (
                           <span className="text-white/30 text-xs">—</span>
                         )}
+                        {(() => {
+                          const cfg = getValidationBadge(item.validation_status, ui)
+                          if (!cfg) return null
+                          return (
+                            <span
+                              title={item.validation_reason || cfg.label}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border whitespace-nowrap ${cfg.badgeClass} ml-1`}
+                            >
+                              {cfg.icon} {cfg.label}
+                            </span>
+                          )
+                        })()}
                       </td>
 
                       <td className="px-4 py-3.5 whitespace-nowrap">
@@ -1109,7 +1167,8 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
 
                       <td className="px-4 py-3.5 whitespace-nowrap text-xs text-[var(--text-secondary)]">
                         {(() => {
-                          const dateInfo = formatLastBuyDateWithYear(item.last_buy_date, item.meeting_date)
+                          const eff = getEffectiveMeetingDate(item.meeting_date, item.twse_meeting_date)
+                          const dateInfo = formatLastBuyDateWithYear(item.last_buy_date, eff.date)
                           if (!dateInfo) return <span className="text-white/40">-</span>
                           return (
                             <div className="flex items-center gap-1.5 font-medium">
@@ -1120,6 +1179,14 @@ export function OddLotView({ initialItems, latestDate, initialQuery = '' }: OddL
                               {dateInfo.isCrossYear && (
                                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                                   {ui.crossYear}
+                                </span>
+                              )}
+                              {eff.source === 'twse' && item.meeting_date && item.meeting_date !== item.twse_meeting_date && (
+                                <span
+                                  title={ui.officialDateTip}
+                                  className="text-[10px] px-1.5 py-0.2 rounded bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/30"
+                                >
+                                  {ui.officialDate}
                                 </span>
                               )}
                             </div>

@@ -1,5 +1,12 @@
 import type { Locale } from './config'
 
+export interface Quote {
+  en: string
+  zh?: string
+  ja?: string
+  author: string
+}
+
 export interface Dict {
   common: {
     home: string
@@ -31,7 +38,7 @@ export interface Dict {
     label: string
   }
   home: {
-    hero: string
+    heroQuotes: Quote[]
     aiAnalyzeTitle: string
     aiAnalyzeDesc: string
     oddLotTitle: string
@@ -169,6 +176,13 @@ export interface Dict {
     sourceEstimated: string
     sourceMopsTip: string
     sourceEstimateTip: string
+    validationOk: string
+    validationNoGift: string
+    validationDateMismatch: string
+    validationGiftConflict: string
+    validationUnverified: string
+    officialDate: string
+    officialDateTip: string
     categoryAll: string
     categoryEgift: string
     categoryCard: string

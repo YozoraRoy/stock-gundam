@@ -23,8 +23,10 @@ export async function GET(req: Request) {
     console.log('[API/Cron/Seed] Starting TWSE odd lots seed...')
     // TWT53U 無 date 參數，回傳最近一交易日盤後資料。於非交易日執行時會誤標日期，
     // 因此一律以「最近開市日」作為該批資料的 date，確保資料與交易日一致。
-    const today = new Date()
-    const targetDate = isTaiwanMarketTradingDay(today) ? today : getLastMarketTradingDay(today)
+    // 用 Asia/Taipei 判斷今天是否交易日（Azure 伺服器時區為 UTC，直接 new Date() 會算錯）。
+    const nowTw = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date())
+    const todayTw = new Date(`${nowTw}T00:00:00`)
+    const targetDate = isTaiwanMarketTradingDay(todayTw) ? todayTw : getLastMarketTradingDay(todayTw)
     const dateStr = formatDateCompact(targetDate)
     const oddLotCount = await fetchTwseOddLots(dateStr)
 

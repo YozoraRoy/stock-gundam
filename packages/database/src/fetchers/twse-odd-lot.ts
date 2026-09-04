@@ -24,24 +24,47 @@ export async function fetchTwseOddLots(date?: string): Promise<number> {
 async function fetchForDate(targetDate: string): Promise<number> {
   const url = 'https://openapi.twse.com.tw/v1/exchangeReport/TWT53U'
 
-  const res = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-    },
-  })
-  if (!res.ok) throw new Error(`TWSE OpenAPI error: ${res.status}`)
+  // TWSE OpenAPI 偶發空回應/暫時性失敗。重試數次避免「交易日沒抓到資料」。
+  const maxAttempts = 3
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+      })
+      if (!res.ok) throw new Error(`TWSE OpenAPI error: ${res.status}`)
 
-  const items = (await res.json()) as TwseOpenApiOddLotItem[]
-  if (!Array.isArray(items) || items.length === 0) {
-    console.warn(`TWSE OpenAPI returned empty list for ${targetDate}`)
-    return 0
-  }
+      const items = (await res.json()) as TwseOpenApiOddLotItem[]
+      if (!Array.isArray(items) || items.length === 0) {
+        if (attempt < maxAttempts) {
+          console.warn(`TWSE OpenAPI empty list for ${targetDate}, retry ${attempt}/${maxAttempts}`)
+          await sleep(1000 * attempt)
+          continue
+        }
+        console.warn(`TWSE OpenAPI returned empty list for ${targetDate}`)
+        return 0
+      }
 
-  if (isAzureSql) {
-    return insertAzureSql(items, targetDate)
+      if (isAzureSql) {
+        return insertAzureSql(items, targetDate)
+      }
+      return insertSqlite(items, targetDate)
+    } catch (e) {
+      if (attempt < maxAttempts) {
+        console.warn(`TWSE OpenAPI error for ${targetDate}, retry ${attempt}/${maxAttempts}:`, (e as Error).message)
+        await sleep(1000 * attempt)
+        continue
+      }
+      throw e
+    }
   }
-  return insertSqlite(items, targetDate)
+  return 0
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
 }
 
 function insertSqlite(items: TwseOpenApiOddLotItem[], targetDate: string): number {

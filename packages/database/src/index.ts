@@ -25,4 +25,6 @@ export {
   extractGiftEvidence,
 } from './fetchers/mops.js'
 export type { MopsMeeting, ClaimRule, ClaimResult } from './fetchers/mops.js'
+export { fetchTwseMeetings } from './fetchers/twse-meetings.js'
+export type { TwseMeeting } from './fetchers/twse-meetings.js'
 

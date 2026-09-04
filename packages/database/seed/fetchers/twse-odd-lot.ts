@@ -19,16 +19,32 @@ export async function fetchTwseOddLots(date?: string) {
   // TWSE 官方 OpenAPI 盤後零股交易行情 API (TWT53U)
   const url = `https://openapi.twse.com.tw/v1/exchangeReport/TWT53U`
 
-  const res = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-    },
-  })
-  if (!res.ok) throw new Error(`TWSE OpenAPI error: ${res.status}`)
+  // TWSE OpenAPI 偶發空回應/暫時性失敗。重試數次避免「交易日沒抓到資料」。
+  const maxAttempts = 3
+  let items: TwseOpenApiOddLotItem[] = []
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+      })
+      if (!res.ok) throw new Error(`TWSE OpenAPI error: ${res.status}`)
 
-  const items = (await res.json()) as TwseOpenApiOddLotItem[]
-  if (!Array.isArray(items) || items.length === 0) {
+      const json = (await res.json()) as TwseOpenApiOddLotItem[]
+      if (Array.isArray(json) && json.length > 0) {
+        items = json
+        break
+      }
+      console.warn(`TWSE OpenAPI empty list for ${targetDate}; retry ${attempt}/${maxAttempts}`)
+    } catch (e) {
+      console.warn(`TWSE OpenAPI error for ${targetDate}; retry ${attempt}/${maxAttempts}:`, (e as Error).message)
+    }
+    if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, 1000 * attempt))
+  }
+
+  if (items.length === 0) {
     console.warn(`TWSE OpenAPI returned empty list for ${targetDate}`)
     return 0
   }
