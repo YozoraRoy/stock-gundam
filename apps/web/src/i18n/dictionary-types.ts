@@ -341,6 +341,11 @@ export interface Dict {
   backtest: {
     pageTitle: string
     pageDesc: string
+    explainTitle: string
+    explainWhyLine: string
+    explainWhyRate: string
+    explainWhyLineTitle: string
+    explainWhyRateTitle: string
     labelYears: string
     labelHoldingDays: string
     labelTargetPct: string

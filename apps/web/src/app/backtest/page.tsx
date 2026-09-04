@@ -230,6 +230,7 @@ export default function BacktestPage() {
   const [searching, setSearching] = useState(false)
   const [liveBias, setLiveBias] = useState<LiveBias | null>(null)
   const [biasSource, setBiasSource] = useState<'close' | 'live'>('close')
+  const [showExplain, setShowExplain] = useState(false)
   const [showTop, setShowTop] = useState(false)
   const [topRange, setTopRange] = useState<TopVolumeRange>('day')
   const [topList, setTopList] = useState<TopVolumeItem[]>([])
@@ -446,6 +447,34 @@ export default function BacktestPage() {
           .replace('{stopPct}', stopPct || '5')
           .replace('{years}', years || '5')}
       </p>
+
+      <div className="mb-8 rounded-xl bg-[var(--bg-card)] border border-white/5 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowExplain((s) => !s)}
+          className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-white/5 transition"
+          aria-expanded={showExplain}
+        >
+          <span className="text-sm font-medium text-[var(--accent)]">{ui.explainTitle}</span>
+          {showExplain ? (
+            <ChevronUp className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
+          )}
+        </button>
+        {showExplain && (
+          <div className="px-4 pb-4 space-y-3 text-sm text-[var(--text-secondary)] leading-relaxed">
+            <div>
+              <p className="font-medium text-[var(--text-primary)] mb-1">{ui.explainWhyLineTitle}</p>
+              <p>{ui.explainWhyLine}</p>
+            </div>
+            <div>
+              <p className="font-medium text-[var(--text-primary)] mb-1">{ui.explainWhyRateTitle}</p>
+              <p>{ui.explainWhyRate}</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       <form onSubmit={run} className="mb-8 space-y-3 max-w-2xl">
         <div className="grid grid-cols-4 gap-2">

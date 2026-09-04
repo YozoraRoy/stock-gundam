@@ -386,6 +386,11 @@ export const en: Dict = {
   backtest: {
     pageTitle: 'Cycle Entry Model',
     pageDesc: 'Taiwan cycle entry model (quarterly-line deviation): signal confirmed at close, enter next trading day. Win if +{targetPct}% within {holdingDays} days, lose if −{stopPct}% first. Using {years} years of history.',
+    explainTitle: 'Why the quarterly-line deviation (乖離率)?',
+    explainWhyLineTitle: 'Why the quarterly line (季線)?',
+    explainWhyLine: 'The quarterly line is the average of the last 60 trading-day closing prices, representing the market\u2019s mid-term average cost and trend. When price sits well below it, most recent buyers are underwater and sentiment is cold \u2014 a relatively cheaper entry. When price runs well above it, the market is overheated and chasing is risky. Using it as a baseline filters out single-day noise to capture the \u201cmid-term trend\u201d position.',
+    explainWhyRateTitle: 'Why a deviation rate instead of a price gap?',
+    explainWhyRate: 'The deviation rate converts the gap between price and the quarterly line into a percentage. That is because raw distance cannot be compared across stocks: a $5 drop is −5% on a $100 stock but only −0.5% on a $1000 stock. Percentages put every price level and every stock on the same ruler, so the backtested thresholds stay meaningful and transferable across stocks.',
     labelYears: 'Last X years',
     labelHoldingDays: 'Holding days',
     labelTargetPct: 'Target profit %',
