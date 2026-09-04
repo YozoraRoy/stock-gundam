@@ -11,7 +11,7 @@ import {
   ReferenceDot,
   ResponsiveContainer,
 } from 'recharts'
-import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Activity, ListOrdered, X, Zap } from 'lucide-react'
+import { Search as SearchIcon, TrendingDown, Target, Repeat, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Activity, ListOrdered, X, Zap, SlidersHorizontal, CheckCircle2 } from 'lucide-react'
 import { searchStocks, StockCandidateList, type StockCandidate } from '@/components/stock-search'
 import { useI18n } from '@/i18n/LanguageProvider'
 import type { Dict } from '@/i18n/dictionaries'
@@ -210,15 +210,53 @@ function getColumnHelp(dict: Dict): Record<string, string> {
   }
 }
 
+function parsePresetText(raw: string) {
+  const match = raw.match(/^(.*?)\s*\((.*?)\)$/)
+  if (match) {
+    return { title: match[1].trim(), desc: match[2].trim() }
+  }
+  return { title: raw, desc: '' }
+}
+
 export default function BacktestPage() {
-  const { dict } = useI18n()
+  const { dict, locale } = useI18n()
   const ui = dict.backtest
   const columnHelp = getColumnHelp(dict)
   const [symbol, setSymbol] = useState('')
-  const [holdingDays, setHoldingDays] = useState('40')
-  const [targetPct, setTargetPct] = useState('8')
-  const [stopPct, setStopPct] = useState('5')
-  const [years, setYears] = useState('5')
+  const [stockName, setStockName] = useState('')
+  const [holdingDays, setHoldingDays] = useState('252')
+  const [targetPct, setTargetPct] = useState('25')
+  const [stopPct, setStopPct] = useState('12')
+  const [years, setYears] = useState('15')
+
+  type PresetType = 'short' | 'medium' | 'long' | 'custom'
+
+  const applyPreset = (type: 'short' | 'medium' | 'long') => {
+    if (type === 'short') {
+      setYears('5')
+      setHoldingDays('40')
+      setTargetPct('8')
+      setStopPct('5')
+    } else if (type === 'medium') {
+      setYears('10')
+      setHoldingDays('120')
+      setTargetPct('15')
+      setStopPct('8')
+    } else if (type === 'long') {
+      setYears('15')
+      setHoldingDays('252')
+      setTargetPct('25')
+      setStopPct('12')
+    }
+  }
+
+  const getActivePreset = (): PresetType => {
+    if (years === '5' && holdingDays === '40' && targetPct === '8' && stopPct === '5') return 'short'
+    if (years === '10' && holdingDays === '120' && targetPct === '15' && stopPct === '8') return 'medium'
+    if (years === '15' && holdingDays === '252' && targetPct === '25' && stopPct === '12') return 'long'
+    return 'custom'
+  }
+  const activePreset = getActivePreset()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<BacktestResponse | null>(null)
@@ -239,14 +277,14 @@ export default function BacktestPage() {
   const [topInsights, setTopInsights] = useState<Record<string, TopInsight | 'loading' | 'error'>>({})
   const dropdownRef = useRef<HTMLDivElement | null>(null)
 
-  // 非純數字（可能是中文名稱）時，debounce 共用搜尋（/api/stocks/search）模糊搜尋台股
+  // debounce 共用搜尋（/api/stocks/search）搜尋台股（支援代號與中文名稱）
   useEffect(() => {
     const q = symbol.trim()
-    const pureTwCode = /^\d{4,6}$/.test(q)
-    if (!q || pureTwCode) {
+    if (!q) {
       setSuggestions([])
       setShowDropdown(false)
       setSearching(false)
+      setStockName('')
       return
     }
     setSearching(true)
@@ -255,20 +293,30 @@ export default function BacktestPage() {
       try {
         const results = await searchStocks(q, 'tw')
         setSuggestions(results)
+        // 自動檢查是否已有完全匹配的代號或名稱
+        const exactMatch = results.find(
+          (r) => r.symbol.toUpperCase() === q.toUpperCase() || r.name === q
+        )
+        if (exactMatch) {
+          setStockName(exactMatch.name)
+        } else if (results.length === 1 && (results[0].symbol.toUpperCase().startsWith(q.toUpperCase()) || results[0].name.includes(q))) {
+          setStockName(results[0].name)
+        }
       } catch {
         setSuggestions([])
       } finally {
         setSearching(false)
       }
-    }, 300)
+    }, 250)
     return () => clearTimeout(t)
   }, [symbol])
 
   // 點選下拉選項 → 填入代號並自動回測
   const pickStock = (s: Suggestion) => {
     setSymbol(s.symbol)
+    setStockName(s.name)
     setShowDropdown(false)
-    runFromSymbol(s.symbol)
+    void runFromSymbol(s.symbol, s.name)
   }
 
   // 點擊外部關閉下拉
@@ -285,20 +333,28 @@ export default function BacktestPage() {
     trackEvent('page_view')
   }, [])
 
-  const runFromSymbol = async (sym: string) => {
+  const runFromSymbol = async (sym: string, nameOpt?: string) => {
     setLoading(true)
     setError(null)
     setResult(null)
     setLiveBias(null)
     setExpandedThreshold(null)
+    if (nameOpt) {
+      setStockName(nameOpt)
+    } else if (!stockName) {
+      void searchStocks(sym, 'tw').then((res) => {
+        const m = res.find((r) => r.symbol.toUpperCase() === sym.toUpperCase()) ?? res[0]
+        if (m) setStockName(m.name)
+      }).catch(() => {})
+    }
     trackEvent('backtest_run', sym)
     try {
       const qs = new URLSearchParams({
         symbol: sym,
-        holdingDays: holdingDays || '40',
-        target: targetPct || '8',
-        stop: stopPct || '5',
-        years: years || '5',
+        holdingDays: holdingDays || '252',
+        target: targetPct || '25',
+        stop: stopPct || '12',
+        years: years || '15',
       })
       const res = await fetch(`/api/backtest?${qs.toString()}`)
       const data = await res.json()
@@ -322,7 +378,8 @@ export default function BacktestPage() {
     e?.preventDefault()
     const sym = symbol.trim()
     if (!sym) return
-    await runFromSymbol(sym)
+    setShowDropdown(false)
+    await runFromSymbol(sym, stockName)
   }
 
   // 抓取「成交量 Top 20」清單（依所選範圍），並非同步逐檔計算進場閾值與目前乖離。
@@ -359,10 +416,10 @@ export default function BacktestPage() {
     try {
       const qs = new URLSearchParams({
         symbol,
-        holdingDays: holdingDays || '40',
-        target: targetPct || '8',
-        stop: stopPct || '5',
-        years: years || '5',
+        holdingDays: holdingDays || '252',
+        target: targetPct || '25',
+        stop: stopPct || '12',
+        years: years || '15',
       })
       const res = await fetch(`/api/backtest/insight?${qs.toString()}`)
       const data = await res.json()
@@ -387,8 +444,9 @@ export default function BacktestPage() {
   // 點選排行榜中的股票 → 填入代號、關閉 modal、自動開始回測。
   const pickTopStock = (item: TopVolumeItem) => {
     setSymbol(item.symbol)
+    setStockName(item.name)
     setShowTop(false)
-    void runFromSymbol(item.symbol)
+    void runFromSymbol(item.symbol, item.name)
   }
 
   const triggerPoints = (result?.series ?? []).filter((p) => p.trigger)
@@ -442,10 +500,10 @@ export default function BacktestPage() {
       </div>
       <p className="text-[var(--text-secondary)] mb-8">
         {ui.pageDesc
-          .replace('{holdingDays}', holdingDays || '40')
-          .replace('{targetPct}', targetPct || '8')
-          .replace('{stopPct}', stopPct || '5')
-          .replace('{years}', years || '5')}
+          .replace('{holdingDays}', holdingDays || '252')
+          .replace('{targetPct}', targetPct || '25')
+          .replace('{stopPct}', stopPct || '12')
+          .replace('{years}', years || '15')}
       </p>
 
       <div className="mb-8 rounded-xl bg-[var(--bg-card)] border border-white/5 overflow-hidden">
@@ -476,96 +534,223 @@ export default function BacktestPage() {
         )}
       </div>
 
-      <form onSubmit={run} className="mb-8 space-y-3 max-w-2xl">
-        <div className="grid grid-cols-4 gap-2">
-          <label className="block flex-1">
-            <span className="block text-xs text-[var(--text-secondary)] mb-1">{ui.labelYears}</span>
-            <input
-              type="number"
-              min={1}
-              max={15}
-              value={years}
-              onChange={(e) => setYears(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] outline-none text-sm"
-            />
-          </label>
-          <label className="block flex-1">
-            <span className="block text-xs text-[var(--text-secondary)] mb-1">{ui.labelHoldingDays}</span>
-            <input
-              type="number"
-              min={1}
-              max={252}
-              value={holdingDays}
-              onChange={(e) => setHoldingDays(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] outline-none text-sm"
-            />
-          </label>
-          <label className="block flex-1">
-            <span className="block text-xs text-[var(--text-secondary)] mb-1">{ui.labelTargetPct}
-              <HelpCell text={ui.targetPctHelp} />
-            </span>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={targetPct}
-              onChange={(e) => setTargetPct(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] outline-none text-sm"
-            />
-          </label>
-          <label className="block flex-1">
-            <span className="block text-xs text-[var(--text-secondary)] mb-1">{ui.labelStopPct}</span>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={stopPct}
-              onChange={(e) => setStopPct(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] outline-none text-sm"
-            />
-          </label>
+      <form onSubmit={run} className="mb-8 rounded-2xl bg-[var(--bg-card)] border border-white/5 p-5 md:p-6 shadow-xl space-y-6">
+        {/* 標的搜尋與主要操作區 */}
+        <div className="space-y-2.5">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="relative flex-1" ref={dropdownRef}>
+              <SearchIcon className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" />
+              <input
+                value={symbol}
+                onChange={(e) => {
+                  setSymbol(e.target.value)
+                  if (stockName) setStockName('')
+                }}
+                onFocus={() => {
+                  const q = symbol.trim()
+                  if (q && suggestions.length) setShowDropdown(true)
+                }}
+                placeholder={ui.placeholder}
+                className={`w-full h-11 pl-10 ${
+                  stockName ? 'pr-32 sm:pr-36' : symbol ? 'pr-10' : 'pr-4'
+                } rounded-xl bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] outline-none text-sm md:text-base text-[var(--text-primary)] transition placeholder:text-[var(--text-secondary)]/50`}
+              />
+
+              {/* 輸入框內部右側：中文名稱即時小標籤 + 清除按鈕 */}
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                {stockName && (
+                  <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--accent)]/15 border border-[var(--accent)]/30 text-xs font-semibold text-[var(--accent)] shadow-sm pointer-events-auto animate-in fade-in zoom-in-95 duration-150">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+                    <span className="truncate max-w-[130px]">{stockName}</span>
+                  </span>
+                )}
+                {symbol && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSymbol('')
+                      setStockName('')
+                      setSuggestions([])
+                    }}
+                    className="p-1 rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition pointer-events-auto"
+                    aria-label="Clear input"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {(showDropdown || searching) && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-30 rounded-xl bg-[var(--bg-card)] border border-white/10 shadow-2xl overflow-hidden">
+                  <StockCandidateList
+                    candidates={suggestions}
+                    loading={searching}
+                    onPick={pickStock}
+                    layout="stack"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="submit"
+                disabled={loading}
+                className="h-11 px-6 rounded-xl bg-[var(--accent)] text-white font-medium text-sm hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm transition shrink-0 whitespace-nowrap"
+              >
+                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
+                {loading ? ui.btnBacktesting : ui.btnBacktest}
+              </button>
+              <button
+                type="button"
+                onClick={openTop}
+                className="h-11 px-4 rounded-xl bg-[var(--bg-secondary)] border border-white/10 text-sm font-medium text-[var(--text-primary)] hover:bg-white/5 transition flex items-center justify-center gap-2 shrink-0 whitespace-nowrap"
+              >
+                <ListOrdered className="w-4 h-4 text-[var(--accent)]" />
+                {ui.btnTopVolume}
+              </button>
+            </div>
+          </div>
+
+          {/* 輸入框下方：標的已識別中文名稱專屬指示條 */}
+          {stockName && (
+            <div className="flex flex-wrap items-center gap-2 pt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+              <span className="text-xs text-[var(--text-secondary)]">已辨識標的：</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/25 text-xs text-[var(--accent)] shadow-sm">
+                <span className="font-mono font-bold text-[var(--text-primary)]">{symbol.toUpperCase()}</span>
+                <span className="w-1 h-1 rounded-full bg-[var(--accent)]/50" />
+                <span className="font-semibold text-[var(--accent)]">{stockName}</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-[var(--text-secondary)] uppercase font-normal">
+                  台股
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 max-w-md">
-          <div className="relative flex-1" ref={dropdownRef}>
-            <SearchIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" />
-            <input
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-              onFocus={() => {
-                const q = symbol.trim()
-                if (q && !/^\d{4,6}$/.test(q) && suggestions.length) setShowDropdown(true)
-              }}
-              placeholder={ui.placeholder}
-              className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] outline-none text-sm"
-            />
-            {(showDropdown || searching) && (
-              <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-lg bg-[var(--bg-card)] border border-white/10 shadow-xl overflow-hidden">
-                <StockCandidateList
-                  candidates={suggestions}
-                  loading={searching}
-                  onPick={pickStock}
-                  layout="stack"
-                />
-              </div>
+        {/* 策略風格推薦與自訂參數設定 */}
+        <div className="pt-4 border-t border-white/5 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+              <SlidersHorizontal className="w-4 h-4 text-[var(--accent)]" />
+              {ui.presetLabel}
+            </span>
+            {activePreset === 'custom' ? (
+              <span className="text-xs px-2 py-0.5 rounded-md bg-white/5 text-[var(--text-secondary)] border border-white/5">
+                {locale === 'en' ? 'Custom' : locale === 'ja' ? 'カスタム' : '自訂參數模式'}
+              </span>
+            ) : (
+              <span className="text-xs text-[var(--text-secondary)]">
+                {locale === 'en' ? 'Click preset to quickly apply settings' : locale === 'ja' ? 'スタイルをクリックして即座に適用' : '點選風格即可快速套用建議參數'}
+              </span>
             )}
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white font-medium text-sm hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
-            {loading ? ui.btnBacktesting : ui.btnBacktest}
-          </button>
-          <button
-            type="button"
-            onClick={openTop}
-            className="px-4 py-2 rounded-lg bg-[var(--bg-secondary)] border border-white/10 text-sm font-medium text-[var(--text-primary)] hover:bg-white/5 transition flex items-center gap-2 shrink-0"
-          >
-            <ListOrdered className="w-4 h-4 text-[var(--accent)]" />
-            {ui.btnTopVolume}
-          </button>
+
+          {/* 三個推薦風格按鈕 */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {(
+              [
+                { id: 'short', raw: ui.presetShort },
+                { id: 'medium', raw: ui.presetMedium },
+                { id: 'long', raw: ui.presetLong },
+              ] as const
+            ).map(({ id, raw }) => {
+              const { title, desc } = parsePresetText(raw)
+              const isSelected = activePreset === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => applyPreset(id)}
+                  className={`px-3.5 py-2.5 rounded-xl border text-left transition-all ${
+                    isSelected
+                      ? 'bg-[var(--accent)]/15 border-[var(--accent)] text-[var(--accent)] font-medium shadow-sm ring-1 ring-[var(--accent)]/30'
+                      : 'border-white/10 bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-white/20 hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <span className={`text-sm font-semibold ${isSelected ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
+                      {title}
+                    </span>
+                    {isSelected && (
+                      <span className="w-2 h-2 rounded-full bg-[var(--accent)] ring-2 ring-[var(--accent)]/20" />
+                    )}
+                  </div>
+                  {desc && <div className="text-xs text-[var(--text-secondary)] leading-relaxed">{desc}</div>}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* 4 個參數自訂細項 */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            <label className="block">
+              <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">{ui.labelYears}</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={1}
+                  max={15}
+                  value={years}
+                  onChange={(e) => setYears(e.target.value)}
+                  className="w-full h-10 px-3 pr-8 rounded-xl bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] outline-none text-sm transition"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-secondary)] pointer-events-none">
+                  {locale === 'en' ? 'yrs' : '年'}
+                </span>
+              </div>
+            </label>
+            <label className="block">
+              <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">{ui.labelHoldingDays}</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={1}
+                  max={252}
+                  value={holdingDays}
+                  onChange={(e) => setHoldingDays(e.target.value)}
+                  className="w-full h-10 px-3 pr-8 rounded-xl bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] outline-none text-sm transition"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-secondary)] pointer-events-none">
+                  {locale === 'en' ? 'days' : '日'}
+                </span>
+              </div>
+            </label>
+            <label className="block">
+              <span className="flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+                {ui.labelTargetPct}
+                <HelpCell text={ui.targetPctHelp} />
+              </span>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={targetPct}
+                  onChange={(e) => setTargetPct(e.target.value)}
+                  className="w-full h-10 px-3 pr-8 rounded-xl bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] outline-none text-sm transition"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-secondary)] pointer-events-none">
+                  %
+                </span>
+              </div>
+            </label>
+            <label className="block">
+              <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">{ui.labelStopPct}</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={stopPct}
+                  onChange={(e) => setStopPct(e.target.value)}
+                  className="w-full h-10 px-3 pr-8 rounded-xl bg-[var(--bg-secondary)] border border-white/10 focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] outline-none text-sm transition"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-secondary)] pointer-events-none">
+                  %
+                </span>
+              </div>
+            </label>
+          </div>
         </div>
       </form>
 
@@ -578,12 +763,30 @@ export default function BacktestPage() {
       {loading && (
         <div className="p-10 text-center text-[var(--text-secondary)]">
           <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />
-          {ui.loadingData}
+          {ui.loadingData.replace('{years}', years || '15')}
         </div>
       )}
 
       {result && (
         <div className="space-y-6">
+          {/* 回測標的與參數摘要標題 */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-[var(--bg-card)] border border-white/5 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="font-mono text-xl font-bold text-[var(--accent)]">{symbol.toUpperCase()}</span>
+              {stockName && (
+                <span className="text-base font-semibold text-[var(--text-primary)]">
+                  {stockName}
+                </span>
+              )}
+              <span className="text-xs px-2 py-0.5 rounded-md bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/30 font-medium">
+                近 {years} 年週期模型
+              </span>
+            </div>
+            <div className="text-xs text-[var(--text-secondary)]">
+              持有 {holdingDays} 日 · 目標 +{targetPct}% · 停損 {stopPct}%
+            </div>
+          </div>
+
           {result.belowTarget && (
             <div className="flex items-center gap-2 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
               <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -623,7 +826,7 @@ export default function BacktestPage() {
             </div>
             <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-white/5">
               <div className="flex items-center gap-2 text-[var(--text-secondary)] text-xs mb-2">
-                <Clock className="w-3.5 h-3.5" /> {ui.statAvgDays}
+                <Clock className="w-3.5 h-3.5" /> {ui.statAvgDays.replace('{targetPct}', targetPct || '25')}
               </div>
               <div className="text-2xl font-bold">{fmtDays(result.avgDaysToTarget, ui.daysUnit)}</div>
             </div>
@@ -720,7 +923,7 @@ export default function BacktestPage() {
 
           <div className="rounded-xl bg-[var(--bg-card)] border border-white/5 p-4">
             <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-sm font-medium">{ui.chartTitle.replace('{years}', years || '5')}</h2>
+              <h2 className="text-sm font-medium">{ui.chartTitle.replace('{years}', years || '15')}</h2>
               {currentBias != null && (
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full ${
@@ -777,7 +980,7 @@ export default function BacktestPage() {
               </ResponsiveContainer>
             </div>
             <p className="text-xs text-[var(--text-secondary)] mt-3">
-              {ui.chartTriggerDotsNote.replace('{years}', years || '5')}
+              {ui.chartTriggerDotsNote.replace('{years}', years || '15')}
             </p>
           </div>
 

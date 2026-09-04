@@ -39,10 +39,10 @@ export async function GET(req: Request) {
   }
 
   // 比照實際回測：使用表單參數與相同年份窗口，確保預覽閾值與 /api/backtest 一致。
-  const holdingDays = parseNum(searchParams.get('holdingDays'), 40, 1, 252)
-  const targetPct = parseNum(searchParams.get('target'), 8, 1, 100)
-  const stopPct = parseNum(searchParams.get('stop'), 5, 1, 100)
-  const years = parseNum(searchParams.get('years'), 5, 1, 15)
+  const holdingDays = parseNum(searchParams.get('holdingDays'), 252, 1, 252)
+  const targetPct = parseNum(searchParams.get('target'), 25, 1, 100)
+  const stopPct = parseNum(searchParams.get('stop'), 12, 1, 100)
+  const years = parseNum(searchParams.get('years'), 15, 1, 15)
 
   const cacheKey = `${symbol}|${holdingDays}|${targetPct}|${stopPct}|${years}`
   const hit = cache.get(cacheKey)

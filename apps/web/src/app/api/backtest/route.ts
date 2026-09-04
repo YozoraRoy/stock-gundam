@@ -22,10 +22,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
   }
 
-  const holdingDays = parseNum(searchParams.get('holdingDays'), 40, 1, 252)
-  const targetPct = parseNum(searchParams.get('target'), 8, 1, 100)
-  const stopPct = parseNum(searchParams.get('stop'), 5, 1, 100)
-  const years = parseNum(searchParams.get('years'), 5, 1, 15)
+  const holdingDays = parseNum(searchParams.get('holdingDays'), 252, 1, 252)
+  const targetPct = parseNum(searchParams.get('target'), 25, 1, 100)
+  const stopPct = parseNum(searchParams.get('stop'), 12, 1, 100)
+  const years = parseNum(searchParams.get('years'), 15, 1, 15)
 
   try {
     const provider = registry.get('yahoo-finance')

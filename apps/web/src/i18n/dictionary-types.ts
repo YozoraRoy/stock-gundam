@@ -356,6 +356,10 @@ export interface Dict {
     labelHoldingDays: string
     labelTargetPct: string
     labelStopPct: string
+    presetLabel: string
+    presetShort: string
+    presetMedium: string
+    presetLong: string
     targetPctHelp: string
     placeholder: string
     btnBacktest: string
