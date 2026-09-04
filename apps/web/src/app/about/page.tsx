@@ -105,6 +105,11 @@ export default async function AboutPage() {
           <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-3">{d.disclaimerTitle}</h2>
           <div className="rounded-xl border border-[var(--accent-red)]/30 bg-[var(--accent-red)]/5 px-6 py-5">
             <p className="text-sm leading-relaxed text-[var(--text-secondary)]">{d.disclaimerDesc}</p>
+            <div className="mt-3 pt-3 border-t border-[var(--accent-red)]/20">
+              <Link href={localizePath(locale, '/terms')} className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1 font-medium">
+                {d.disclaimerLink} &rarr;
+              </Link>
+            </div>
           </div>
         </section>
       </div>

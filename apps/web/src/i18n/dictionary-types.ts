@@ -99,6 +99,7 @@ export interface Dict {
     openSourceDesc: string
     disclaimerTitle: string
     disclaimerDesc: string
+    disclaimerLink: string
   }
   login: {
     title: string
