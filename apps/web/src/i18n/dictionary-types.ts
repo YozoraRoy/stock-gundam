@@ -54,6 +54,8 @@ export interface Dict {
     inDevelopment: string
   }
   about: {
+    metaTitle: string
+    metaDesc: string
     title: string
     hero1: string
     hero2: string
@@ -110,6 +112,8 @@ export interface Dict {
     devLoginError: string
   }
   privacy: {
+    metaTitle: string
+    metaDesc: string
     title: string
     s1Title: string
     s1p1: string
@@ -131,6 +135,8 @@ export interface Dict {
     updated: string
   }
   terms: {
+    metaTitle: string
+    metaDesc: string
     title: string
     s1Title: string
     s1p1: string

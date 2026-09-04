@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { useI18n } from '@/i18n/LanguageProvider'
+import { localizePath } from '@/i18n/paths'
 
 const GoogleIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">
@@ -24,7 +25,7 @@ const LineIcon = () => (
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { dict } = useI18n()
+  const { dict, locale } = useI18n()
   const redirect = searchParams.get('redirect') || '/'
   const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
 
@@ -115,7 +116,7 @@ function LoginContent() {
           <div className="mt-4 text-center text-xs text-red-400">{checkError}</div>
         )}
         <div className="mt-4 text-center">
-          <Link href="/" className="text-xs text-[var(--accent)] hover:underline">
+          <Link href={localizePath(locale, '/')} className="text-xs text-[var(--accent)] hover:underline">
             {dict.common.backToHome}
           </Link>
         </div>

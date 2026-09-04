@@ -78,6 +78,8 @@ export const en: Dict = {
     inDevelopment: 'In Development',
   },
   about: {
+    metaTitle: 'About Vestential — Investment Information for Working Professionals',
+    metaDesc: 'Learn about Vestential: a simple, quantifiable, and repeatable investment information tool for working professionals — quarterly-line deviation, odd-lot accumulation, P&L tracking, and AI analysis.',
     title: 'About Vestential',
     hero1: 'Vestential is an investment information platform built for working professionals and everyday investors starting with smaller amounts.',
     hero2: 'For many working professionals, the biggest challenge in investing is not a lack of interest, but a lack of time and expertise to keep up with the vast and complex flow of market information. With news, opinions, and price movements changing every day, it can be difficult to know where the market stands\u2014or whether now may be a relatively reasonable time to start building a position.',
@@ -134,6 +136,8 @@ export const en: Dict = {
     devLoginError: 'Local sign-in failed',
   },
   privacy: {
+    metaTitle: 'Privacy Policy — Vestential',
+    metaDesc: 'Vestential\u2019s privacy policy: how we collect, use, and protect your data.',
     title: 'Privacy Policy',
     s1Title: '1. Data We Collect',
     s1p1: 'Vestential (the \u201cPlatform\u201d) obtains your display name and email address via third-party OAuth sign-in (Google, GitHub) for account identification. The Platform does not collect or store your password.',
@@ -155,6 +159,8 @@ export const en: Dict = {
     updated: 'Last updated: September 2026',
   },
   terms: {
+    metaTitle: 'Terms of Service — Vestential',
+    metaDesc: 'Vestential\u2019s terms of service: conditions and disclaimers governing your use of the platform.',
     title: 'Terms of Service',
     s1Title: '1. Service Description',
     s1p1: 'Vestential (the \u201cPlatform\u201d) provides AI stock analysis, odd-lot quote lookup, portfolio P&L estimation, and cycle entry model estimation as an investment-research aid.',

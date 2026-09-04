@@ -1,6 +1,7 @@
 import { Search, PieChart, Wallet, Activity, BarChart3, Bot } from 'lucide-react'
 import Link from 'next/link'
 import { getDict, getLocale } from '@/i18n/server'
+import { localizePath } from '@/i18n/paths'
 
 export default async function Home() {
   const dict = await getDict()
@@ -28,53 +29,53 @@ export default async function Home() {
       </figure>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
         <Link
-          href="/odd-lot"
+          href={localizePath(locale, '/odd-lot')}
           className="bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left flex flex-col"
         >
           <div className="flex items-start justify-between mb-3">
             <PieChart className="w-7 h-7 text-[var(--accent-green)]" />
           </div>
           <h2 className="text-lg font-semibold mb-1.5">{dict.home.oddLotTitle}</h2>
-          <p className="text-sm text-[var(--text-secondary)] flex-1">
+          <p className="text-base text-[var(--text-secondary)] flex-1">
             {dict.home.oddLotDesc}
           </p>
         </Link>
 
         <Link
-          href="/backtest"
+          href={localizePath(locale, '/backtest')}
           className="bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left flex flex-col"
         >
           <div className="flex items-start justify-between mb-3">
             <Activity className="w-7 h-7 text-[var(--accent-green)]" />
           </div>
           <h2 className="text-lg font-semibold mb-1.5">{dict.home.backtestTitle}</h2>
-          <p className="text-sm text-[var(--text-secondary)] flex-1">
+          <p className="text-base text-[var(--text-secondary)] flex-1">
             {dict.home.backtestDesc}
           </p>
         </Link>
 
         <Link
-          href="/portfolio"
+          href={localizePath(locale, '/portfolio')}
           className="bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left flex flex-col"
         >
           <div className="flex items-start justify-between mb-3">
             <Wallet className="w-7 h-7 text-[var(--accent-green)]" />
           </div>
           <h2 className="text-lg font-semibold mb-1.5">{dict.home.portfolioTitle}</h2>
-          <p className="text-sm text-[var(--text-secondary)] flex-1">
+          <p className="text-base text-[var(--text-secondary)] flex-1">
             {dict.home.portfolioDesc}
           </p>
         </Link>
 
         <Link
-          href="/analyze"
+          href={localizePath(locale, '/analyze')}
           className="bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left flex flex-col"
         >
           <div className="flex items-start justify-between mb-3">
             <Search className="w-7 h-7 text-[var(--accent)]" />
           </div>
           <h2 className="text-lg font-semibold mb-1.5">{dict.home.aiAnalyzeTitle}</h2>
-          <p className="text-sm text-[var(--text-secondary)] flex-1">
+          <p className="text-base text-[var(--text-secondary)] flex-1">
             {dict.home.aiAnalyzeDesc}
           </p>
         </Link>
@@ -87,7 +88,7 @@ export default async function Home() {
             </span>
           </div>
           <h2 className="text-lg font-semibold mb-1.5">{dict.home.optionsTitle}</h2>
-          <p className="text-sm text-[var(--text-secondary)] flex-1">
+          <p className="text-base text-[var(--text-secondary)] flex-1">
             {dict.home.optionsDesc}
           </p>
         </div>
@@ -100,7 +101,7 @@ export default async function Home() {
             </span>
           </div>
           <h2 className="text-lg font-semibold mb-1.5">{dict.home.agentTitle}</h2>
-          <p className="text-sm text-[var(--text-secondary)] flex-1">
+          <p className="text-base text-[var(--text-secondary)] flex-1">
             {dict.home.agentDesc}
           </p>
         </div>

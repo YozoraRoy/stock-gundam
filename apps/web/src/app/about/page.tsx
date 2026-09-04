@@ -1,13 +1,23 @@
 import Link from 'next/link'
 import { Search, PieChart, Wallet, Activity, TrendingUp, Clock } from 'lucide-react'
-import { getDict } from '@/i18n/server'
+import { getDict, getLocale } from '@/i18n/server'
+import { localizePath } from '@/i18n/paths'
+import { buildAlternates } from '@/i18n/metadata'
 
-export const metadata = {
-  title: '關於 Vestential',
+export async function generateMetadata() {
+  const dict = await getDict()
+  const locale = await getLocale()
+  const { metaTitle, metaDesc } = dict.about
+  return {
+    title: metaTitle,
+    description: metaDesc,
+    alternates: buildAlternates(locale, '/about'),
+  }
 }
 
 export default async function AboutPage() {
   const dict = await getDict()
+  const locale = await getLocale()
   const d = dict.about
 
   const steps = [
@@ -36,10 +46,10 @@ export default async function AboutPage() {
           <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-3">{d.methodTitle}</h2>
           <p className="mb-4">{d.methodIntro}</p>
           <ul className="list-disc pl-5 space-y-2">
-            <li><strong className="text-[var(--text-primary)]">{dict.about.methodBiasLabel}</strong> — {dict.about.methodBias}<span>（<Link href="/backtest" className="text-[var(--accent)] hover:underline">{dict.about.methodBiasLink}</Link>）。</span></li>
-            <li><strong className="text-[var(--text-primary)]">{dict.about.methodOddLotLabel}</strong> — {dict.about.methodOddLot}<span>（<Link href="/odd-lot" className="text-[var(--accent)] hover:underline">{dict.about.methodOddLotLink}</Link>）。</span></li>
-            <li><strong className="text-[var(--text-primary)]">{dict.about.methodPortfolioLabel}</strong> — {dict.about.methodPortfolio}<span>（<Link href="/portfolio" className="text-[var(--accent)] hover:underline">{dict.about.methodPortfolioLink}</Link>）。</span></li>
-            <li><strong className="text-[var(--text-primary)]">{dict.about.methodAiLabel}</strong> — {dict.about.methodAi}<span>（<Link href="/analyze" className="text-[var(--accent)] hover:underline">{dict.about.methodAiLink}</Link>）。</span></li>
+            <li><strong className="text-[var(--text-primary)]">{dict.about.methodBiasLabel}</strong> — {dict.about.methodBias}<span>（<Link href={localizePath(locale, '/backtest')} className="text-[var(--accent)] hover:underline">{dict.about.methodBiasLink}</Link>）。</span></li>
+            <li><strong className="text-[var(--text-primary)]">{dict.about.methodOddLotLabel}</strong> — {dict.about.methodOddLot}<span>（<Link href={localizePath(locale, '/odd-lot')} className="text-[var(--accent)] hover:underline">{dict.about.methodOddLotLink}</Link>）。</span></li>
+            <li><strong className="text-[var(--text-primary)]">{dict.about.methodPortfolioLabel}</strong> — {dict.about.methodPortfolio}<span>（<Link href={localizePath(locale, '/portfolio')} className="text-[var(--accent)] hover:underline">{dict.about.methodPortfolioLink}</Link>）。</span></li>
+            <li><strong className="text-[var(--text-primary)]">{dict.about.methodAiLabel}</strong> — {dict.about.methodAi}<span>（<Link href={localizePath(locale, '/analyze')} className="text-[var(--accent)] hover:underline">{dict.about.methodAiLink}</Link>）。</span></li>
           </ul>
         </section>
 
@@ -99,7 +109,7 @@ export default async function AboutPage() {
         </section>
       </div>
       <div className="mt-8">
-        <Link href="/" className="text-sm text-[var(--accent)] hover:underline">
+        <Link href={localizePath(locale, '/')} className="text-sm text-[var(--accent)] hover:underline">
           {dict.common.backToHome}
         </Link>
       </div>

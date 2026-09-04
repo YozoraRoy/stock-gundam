@@ -1,12 +1,24 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+@theme {
+  /* 語意化字級 scale（Tailwind v4 原生 text-* token）：
+     輔助/數據 → text-sm；正文基準 → text-base；區塊標題 → text-lg；頁面標題 → text-2xl */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+}
+
 :root {
   --bg-primary: #0f1118;
   --bg-secondary: #1a1d2e;
   --bg-card: #222639;
   --text-primary: #e8eaf0;
-  --text-secondary: #8b8fa3;
+  --text-secondary: #9aa0b5;
   --accent: #4f8cff;
   --accent-green: #34d399;
   --accent-red: #f87171;
@@ -15,7 +27,7 @@
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
 }
 
 .prose-invert {

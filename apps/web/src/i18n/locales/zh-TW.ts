@@ -78,6 +78,8 @@ export const zhTW: Dict = {
     inDevelopment: '開發中',
   },
   about: {
+    metaTitle: '關於 Vestential — 上班族與小資族的投資資訊參考平台',
+    metaDesc: '了解 Vestential：透過季線乖離率、零股累積、損益追蹤與 AI 分析，為上班族與小資族打造簡單、量化且可重複使用的投資資訊參考工具。',
     title: '關於 Vestential',
     hero1: 'Vestential 是為上班族與小資族打造的投資資訊參考平台。',
     hero2: '對多數上班族而言，投資最大的困難，往往不是沒有興趣，而是沒有足夠的時間與專業，持續追蹤龐大且複雜的市場資訊。當市場每天充滿不同的消息、觀點與價格波動，也很難判斷現在究竟是不是一個相對適合開始累積的時機。',
@@ -134,6 +136,8 @@ export const zhTW: Dict = {
     devLoginError: '本機登入失敗',
   },
   privacy: {
+    metaTitle: '隱私權政策 — Vestential',
+    metaDesc: 'Vestential 的隱私權政策：我們如何收集、使用與保護你的資料。',
     title: '隱私權政策',
     s1Title: '一、資料收集',
     s1p1: 'Vestential（以下簡稱「本平台」）透過 OAuth 第三方登入（Google、GitHub）取得您的顯示名稱與電子郵件地址，作為帳號識別之用。本平台不會收集或儲存您的密碼。',
@@ -155,6 +159,8 @@ export const zhTW: Dict = {
     updated: '最後更新：2026 年 9 月',
   },
   terms: {
+    metaTitle: '服務條款 — Vestential',
+    metaDesc: 'Vestential 的服務條款：使用本平台時需遵守的條件與免責事項。',
     title: '服務條款',
     s1Title: '一、服務說明',
     s1p1: 'Vestential（以下簡稱「本平台」）提供 AI 股票分析、零股行情查詢、個人損益試算與週期進場模型預估等功能，旨在作為投資研究輔助工具。',

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useI18n } from '@/i18n/LanguageProvider'
+import { localizePath } from '@/i18n/paths'
 import { LanguageSwitcher } from '@/i18n/LanguageSwitcher'
 import type { Dict } from '@/i18n/dictionaries'
 
@@ -26,7 +27,7 @@ export interface HeaderUser {
 export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { dict } = useI18n()
+  const { dict, locale } = useI18n()
   const [user, setUser] = useState<HeaderUser | null>(initialUser)
   const [remaining, setRemaining] = useState<number | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -65,7 +66,7 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
   return (
     <header className="sticky top-0 z-50 bg-[var(--bg-primary)]/80 backdrop-blur-md border-b border-white/5">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href={localizePath(locale, '/')} className="flex items-center gap-2">
           <TrendingUp className="w-6 h-6 text-[var(--accent)]" />
           <span className="text-lg font-bold">Vestential</span>
         </Link>
@@ -76,7 +77,7 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={localizePath(locale, item.href)}
                   className={`px-3 py-2 text-sm rounded-lg transition ${
                     isActive
                       ? 'text-[var(--text-primary)] bg-white/10'
@@ -131,7 +132,7 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
                       )}
                     </div>
                     <Link
-                      href="/analyze"
+                      href={localizePath(locale, '/analyze')}
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition"
                     >
@@ -151,7 +152,7 @@ export function Header({ initialUser }: { initialUser: HeaderUser | null }) {
             </div>
           ) : (
             <Link
-              href="/login"
+              href={localizePath(locale, '/login')}
               className="px-3 py-2 text-sm rounded-lg bg-[var(--accent)] text-white font-medium hover:opacity-90 transition"
             >
               {dict.common.login}

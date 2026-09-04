@@ -9,6 +9,7 @@ import { AnalysisCard } from '@/components/analysis-card'
 import { ProgressPanel } from '@/components/progress-panel'
 import { AnalysisOptions } from '@/components/analysis-options'
 import { useI18n } from '@/i18n/LanguageProvider'
+import { localizePath } from '@/i18n/paths'
 import type { Dict } from '@/i18n/dictionaries'
 
 function formatLLMError(raw: string, dict: Dict): string {
@@ -429,7 +430,7 @@ function AnalyzeContent() {
           <div className="flex items-center gap-3">
             {symbolParam && (
               <a
-                href="/analyze"
+                href={localizePath(language, '/analyze')}
                 className="text-xs text-[var(--accent)] hover:underline flex items-center gap-1 bg-[var(--accent)]/10 border border-[var(--accent)]/20 px-2.5 py-1 rounded-lg"
               >
                 <span>{ui.clearSymbolView}</span>

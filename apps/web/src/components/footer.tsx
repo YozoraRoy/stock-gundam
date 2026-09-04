@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useI18n } from '@/i18n/LanguageProvider'
+import { localizePath } from '@/i18n/paths'
 import type { Dict } from '@/i18n/dictionaries'
 
 const footerLinks: { key: keyof Dict['footer']; href: string }[] = [
@@ -11,7 +12,7 @@ const footerLinks: { key: keyof Dict['footer']; href: string }[] = [
 ]
 
 export function Footer() {
-  const { dict } = useI18n()
+  const { dict, locale } = useI18n()
   return (
     <footer className="border-t border-white/5 mt-auto">
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -23,7 +24,7 @@ export function Footer() {
             {footerLinks.map((link) => (
               <Link
                 key={link.href}
-                href={link.href}
+                href={localizePath(locale, link.href)}
                 className="hover:text-[var(--text-primary)] transition"
               >
                 {dict.footer[link.key]}
