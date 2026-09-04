@@ -2,11 +2,16 @@
 
 import { Globe, ChevronDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { locales, localeNames, type Locale } from './config'
 import { useI18n } from './LanguageProvider'
 
+/** 這些頁面由 server 端 `getDict()` 渲染主體內容；在這些頁面上切換語系需整頁重整才能反映。 */
+const SERVER_RENDERED_PAGES: readonly string[] = ['/', '/about', '/terms', '/privacy', '/odd-lot']
+
 export function LanguageSwitcher() {
   const { locale, setLocale, dict } = useI18n()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -29,6 +34,9 @@ export function LanguageSwitcher() {
   const select = (next: Locale) => {
     setLocale(next)
     setOpen(false)
+    if (SERVER_RENDERED_PAGES.includes(pathname ?? '')) {
+      window.location.reload()
+    }
   }
 
   return (
