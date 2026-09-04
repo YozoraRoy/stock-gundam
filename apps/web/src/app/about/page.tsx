@@ -3,7 +3,7 @@ import { Search, PieChart, Wallet, Activity, TrendingUp, Clock } from 'lucide-re
 import { getDict } from '@/i18n/server'
 
 export const metadata = {
-  title: '關於我們 — Vestential',
+  title: '關於 Vestential',
 }
 
 export default async function AboutPage() {
@@ -23,6 +23,16 @@ export default async function AboutPage() {
         <section>
           <p>{d.hero1}</p>
           <p>{d.hero2}</p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-3">{d.visionTitle}</h2>
+          <p className="mb-4">{d.visionP1}</p>
+          <p className="mb-4">{d.visionP2}</p>
+          <p className="mb-3">{d.visionP3}</p>
+          <div className="mt-4 rounded-xl border border-[var(--accent-red)]/30 bg-[var(--accent-red)]/5 px-5 py-4">
+            <p className="leading-relaxed text-[var(--text-secondary)]">{d.visionP4}</p>
+          </div>
         </section>
 
         <section>
@@ -75,16 +85,6 @@ export default async function AboutPage() {
             <TrendingUp className="w-4 h-4 text-[var(--accent)]" />
             {d.closing}
           </p>
-        </section>
-
-        <section>
-          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">{d.techTitle}</h2>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>{d.techFrontend}</li>
-            <li>{d.techBackend}</li>
-            <li>{d.techAi}</li>
-            <li>{d.techData}</li>
-          </ul>
         </section>
 
         <section>

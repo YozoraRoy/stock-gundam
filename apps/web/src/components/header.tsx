@@ -10,10 +10,10 @@ import type { Dict } from '@/i18n/dictionaries'
 
 const navItems: { key: keyof Dict['nav']; href: string }[] = [
   { key: 'home', href: '/' },
-  { key: 'analyze', href: '/analyze' },
   { key: 'oddLot', href: '/odd-lot' },
-  { key: 'portfolio', href: '/portfolio' },
   { key: 'backtest', href: '/backtest' },
+  { key: 'portfolio', href: '/portfolio' },
+  { key: 'analyze', href: '/analyze' },
 ]
 
 export interface HeaderUser {

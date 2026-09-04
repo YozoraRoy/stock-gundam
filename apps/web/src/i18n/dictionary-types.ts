@@ -57,6 +57,11 @@ export interface Dict {
     title: string
     hero1: string
     hero2: string
+    visionTitle: string
+    visionP1: string
+    visionP2: string
+    visionP3: string
+    visionP4: string
     methodTitle: string
     methodIntro: string
     methodBias: string
@@ -76,6 +81,8 @@ export interface Dict {
     featureOddLot: string
     featurePortfolio: string
     featureBacktest: string
+    featurePrivacy: string
+    featureOpen: string
     startTitle: string
     step1Title: string
     step1Desc: string
@@ -87,11 +94,6 @@ export interface Dict {
     step3Desc: string
     step3Cta: string
     closing: string
-    techTitle: string
-    techFrontend: string
-    techBackend: string
-    techAi: string
-    techData: string
     openSourceTitle: string
     openSourceDesc: string
     disclaimerTitle: string
@@ -368,6 +370,10 @@ export interface Dict {
     liveBiasClosePriceNote: string
     liveBiasReached: string
     liveBiasDistance: string
+    biasSourceLabel: string
+    biasSourceClose: string
+    biasSourceLive: string
+    biasSourceLiveBiasLabel: string
     chartTitle: string
     chartBadgeCurrentBias: string
     chartTooltipClose: string

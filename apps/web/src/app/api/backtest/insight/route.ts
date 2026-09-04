@@ -3,15 +3,14 @@ import { registry } from '@stock/market-data'
 import { runGridSearch, MA_PERIOD } from '@stock/backtest'
 import { resolveYahooSymbol } from '@/lib/portfolio'
 
-/** 抓取約 8 個月日線：足夠算 MA60 warmup + 最新收盤乖離。 */
-const HISTORY_DAYS = 240
-
 export const dynamic = 'force-dynamic'
 
 export interface InsightResult {
   symbol: string
   bestThreshold: number | null
   currentBias: number | null
+  latestBias: number | null
+  latestClose: number | null
   livePriceBias: number | null
   ma60: number | null
   livePrice: number | null
@@ -25,6 +24,13 @@ export interface InsightResult {
 const cache = new Map<string, { at: number; data: InsightResult }>()
 const TTL_MS = 30 * 60 * 1000
 
+function parseNum(v: string | null, fallback: number, min: number, max: number): number {
+  if (v == null || v.trim() === '') return fallback
+  const n = Number(v)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(max, Math.max(min, n))
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const symbol = searchParams.get('symbol')?.trim()
@@ -32,7 +38,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
   }
 
-  const hit = cache.get(symbol)
+  // 比照實際回測：使用表單參數與相同年份窗口，確保預覽閾值與 /api/backtest 一致。
+  const holdingDays = parseNum(searchParams.get('holdingDays'), 40, 1, 252)
+  const targetPct = parseNum(searchParams.get('target'), 8, 1, 100)
+  const stopPct = parseNum(searchParams.get('stop'), 5, 1, 100)
+  const years = parseNum(searchParams.get('years'), 5, 1, 15)
+
+  const cacheKey = `${symbol}|${holdingDays}|${targetPct}|${stopPct}|${years}`
+  const hit = cache.get(cacheKey)
   if (hit && Date.now() - hit.at < TTL_MS) {
     return NextResponse.json(hit.data)
   }
@@ -43,7 +56,7 @@ export async function GET(req: Request) {
 
     const end = new Date()
     const start = new Date(end)
-    start.setDate(start.getDate() - HISTORY_DAYS)
+    start.setFullYear(start.getFullYear() - years)
 
     const history = await provider.getHistory(
       yahooSymbol,
@@ -57,6 +70,8 @@ export async function GET(req: Request) {
         symbol: yahooSymbol,
         bestThreshold: null,
         currentBias: null,
+        latestBias: null,
+        latestClose: null,
         livePriceBias: null,
         ma60: null,
         livePrice: null,
@@ -65,14 +80,20 @@ export async function GET(req: Request) {
         inEntryZone: false,
         distanceToTargetPct: null,
       }
-      cache.set(symbol, { at: Date.now(), data })
+      cache.set(cacheKey, { at: Date.now(), data })
       return NextResponse.json(data)
     }
 
-    // 最佳進場乖離閾值（以約 8 個月資料快速尋優，僅取 bestThreshold）
+    // 最佳進場乖離閾值：與 /api/backtest 相同的年份窗口 + 表單參數計算。
     let bestThreshold: number | null = null
     try {
-      const g = runGridSearch(history, { params: {} })
+      const g = runGridSearch(history, {
+        params: {
+          holdingDays,
+          targetProfit: targetPct / 100,
+          maxDrawdown: stopPct / 100,
+        },
+      })
       bestThreshold = g.bestThreshold ?? null
     } catch (_) {
       bestThreshold = null
@@ -91,7 +112,8 @@ export async function GET(req: Request) {
       if (livePrice != null && ma60 > 0) livePriceBias = livePrice / ma60 - 1
     } catch (_) {}
 
-    const currentBias = livePriceBias ?? latestBias
+    // 目前乖離：預設以前一期收盤價為基準；僅在無收盤資料時才退回即時盤中價。
+    const currentBias = latestBias ?? livePriceBias
     const inEntryZone = currentBias != null && bestThreshold != null && currentBias <= bestThreshold / 100
     const distanceToTargetPct =
       currentBias != null && bestThreshold != null ? (currentBias - bestThreshold / 100) * 100 : null
@@ -102,6 +124,8 @@ export async function GET(req: Request) {
       symbol: yahooSymbol,
       bestThreshold,
       currentBias,
+      latestBias,
+      latestClose,
       livePriceBias,
       ma60,
       livePrice,
@@ -110,7 +134,7 @@ export async function GET(req: Request) {
       inEntryZone,
       distanceToTargetPct,
     }
-    cache.set(symbol, { at: Date.now(), data })
+    cache.set(cacheKey, { at: Date.now(), data })
     return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? '計算失敗' }, { status: 500 })

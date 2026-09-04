@@ -81,8 +81,11 @@ interface TopInsight {
   symbol: string
   bestThreshold: number | null
   currentBias: number | null
+  latestBias: number | null
+  latestClose: number | null
   ma60: number | null
   livePrice: number | null
+  livePriceBias: number | null
   asOf: number | null
   targetPrice: number | null
   inEntryZone: boolean
@@ -226,6 +229,7 @@ export default function BacktestPage() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [searching, setSearching] = useState(false)
   const [liveBias, setLiveBias] = useState<LiveBias | null>(null)
+  const [biasSource, setBiasSource] = useState<'close' | 'live'>('close')
   const [showTop, setShowTop] = useState(false)
   const [topRange, setTopRange] = useState<TopVolumeRange>('day')
   const [topList, setTopList] = useState<TopVolumeItem[]>([])
@@ -352,7 +356,14 @@ export default function BacktestPage() {
   // 對單一股票計算「最佳進場閾值 + 目前乖離」，即時回寫到 state。
   const fetchInsight = async (symbol: string) => {
     try {
-      const res = await fetch(`/api/backtest/insight?symbol=${encodeURIComponent(symbol)}`)
+      const qs = new URLSearchParams({
+        symbol,
+        holdingDays: holdingDays || '40',
+        target: targetPct || '8',
+        stop: stopPct || '5',
+        years: years || '5',
+      })
+      const res = await fetch(`/api/backtest/insight?${qs.toString()}`)
       const data = await res.json()
       if (!res.ok) {
         setTopInsights((m) => ({ ...m, [symbol]: 'error' }))
@@ -386,8 +397,9 @@ export default function BacktestPage() {
     ma60: p.ma60 ?? undefined,
   }))
 
-  // 目前（昨收）乖離率 vs 最佳閾值：進場須乖離 ≤ 閾值，即收盤價 ≤ MA60 × (1 + 閾值/100)。
-  const currentBias = liveBias?.latestBias ?? null
+  // 目前乖離率：預設以前一期收盤價為基準；可切換為即時盤中價（需 livePriceBias 存在）。
+  const currentBias =
+    biasSource === 'live' ? (liveBias?.livePriceBias ?? liveBias?.latestBias ?? null) : (liveBias?.latestBias ?? null)
   const bestThreshold = result?.bestThreshold ?? null
   const targetClosePrice = bestThreshold != null && liveBias?.ma60 ? liveBias.ma60 * (1 + bestThreshold / 100) : null
   const distanceToTargetPct =
@@ -590,14 +602,49 @@ export default function BacktestPage() {
 
           {liveBias && (
             <div className="rounded-xl bg-[var(--bg-card)] border border-white/5 p-4">
-              <div className="flex items-center gap-2 text-[var(--text-secondary)] text-xs mb-3">
-                <Activity className="w-3.5 h-3.5 text-[var(--accent)]" />
-                {ui.liveBiasTitle.replace('{date}', formatDate(liveBias.asOf))}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2 text-[var(--text-secondary)] text-xs">
+                  <Activity className="w-3.5 h-3.5 text-[var(--accent)]" />
+                  {ui.liveBiasTitle.replace('{date}', formatDate(liveBias.asOf))}
+                </div>
+                <div
+                  className="flex items-center gap-1 rounded-lg bg-[var(--bg-secondary)] p-0.5"
+                  role="group"
+                  aria-label={ui.biasSourceLabel}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setBiasSource('close')}
+                    className={`px-2.5 py-1 text-xs rounded-md transition ${
+                      biasSource === 'close'
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {ui.biasSourceClose}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBiasSource('live')}
+                    className={`px-2.5 py-1 text-xs rounded-md transition ${
+                      biasSource === 'live'
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {ui.biasSourceLive}
+                  </button>
+                </div>
               </div>
               <div className="flex flex-wrap gap-x-8 gap-y-3">
                 <div>
                   <div className="text-xs text-[var(--text-secondary)] mb-1">
-                    {ui.liveBiasCurrent}{liveBias.livePriceBias != null && Math.abs(liveBias.livePriceBias - liveBias.latestBias!) > 0.001 ? ui.liveBiasPrevCloseLabel.replace('{bias}', fmtPct(liveBias.latestBias)) : ''}
+                    {ui.liveBiasCurrent}
+                    {biasSource === 'close' && liveBias.livePriceBias != null && Math.abs(liveBias.livePriceBias - liveBias.latestBias!) > 0.001
+                      ? ui.biasSourceLiveBiasLabel.replace('{bias}', fmtPct(liveBias.livePriceBias))
+                      : biasSource === 'live' && liveBias.latestBias != null && Math.abs(liveBias.livePriceBias! - liveBias.latestBias) > 0.001
+                        ? ui.liveBiasPrevCloseLabel.replace('{bias}', fmtPct(liveBias.latestBias))
+                        : ''}
                   </div>
                   <div
                     className={`text-2xl font-bold ${
@@ -608,7 +655,7 @@ export default function BacktestPage() {
                           : 'text-[var(--text-primary)]'
                     }`}
                   >
-                    {liveBias.livePriceBias != null ? fmtPct(liveBias.livePriceBias) : fmtPct(liveBias.latestBias)}
+                    {fmtPct(currentBias)}
                   </div>
                   <div className="text-xs text-[var(--text-secondary)] mt-1">
                     {ui.liveBiasMA60}：{liveBias.ma60.toFixed(2)} · {ui.liveBiasPrevClose} {liveBias.latestClose.toFixed(2)}
@@ -911,12 +958,25 @@ export default function BacktestPage() {
                 <div className="max-h-96 overflow-y-auto">
                   {topList.map((item) => {
                     const insight = topInsights[item.symbol]
+                    const ready = insight && insight !== 'loading' && insight !== 'error'
+                    const insightBias =
+                      ready
+                        ? (biasSource === 'live'
+                            ? (insight.livePriceBias ?? insight.latestBias)
+                            : (insight.latestBias ?? insight.livePriceBias))
+                        : null
+                    const insightDistance =
+                      insightBias != null && ready && insight.bestThreshold != null
+                        ? (insightBias - insight.bestThreshold / 100) * 100
+                        : null
+                    const insightReached =
+                      ready && insightBias != null && insight.bestThreshold != null && insightBias <= insight.bestThreshold / 100
                     return (
                       <button
                         key={item.symbol}
                         onClick={() => pickTopStock(item)}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition text-left ${
-                          insight && insight !== 'loading' && insight !== 'error' && insight.inEntryZone
+                          insightReached
                             ? 'bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20'
                             : ''
                         }`}
@@ -939,14 +999,14 @@ export default function BacktestPage() {
                             <div className="text-[11px] text-[var(--text-secondary)]">—</div>
                           ) : insight ? (
                             <div className="text-[11px] tabular-nums">
-                              {insight.inEntryZone ? (
+                              {insightReached ? (
                                 <span className="inline-flex items-center gap-1 text-[var(--accent-green)] font-semibold">
                                   <Zap className="w-3 h-3" />
                                   {ui.topReachedThreshold.replace('{threshold}', fmtPct(insight.bestThreshold != null ? insight.bestThreshold / 100 : 0))} · {ui.topEntryZone}
                                 </span>
-                              ) : insight.distanceToTargetPct != null && insight.bestThreshold != null ? (
+                              ) : insightDistance != null && insight.bestThreshold != null ? (
                                 <span className="text-[var(--text-secondary)]">
-                                  {ui.topThreshold.replace('{threshold}', fmtPct(insight.bestThreshold / 100))} · {ui.topDistance.replace('{pct}', insight.distanceToTargetPct.toFixed(1))}
+                                  {ui.topThreshold.replace('{threshold}', fmtPct(insight.bestThreshold / 100))} · {ui.topDistance.replace('{pct}', insightDistance.toFixed(1))}
                                 </span>
                               ) : (
                                 <span className="text-[var(--text-secondary)]">{ui.topInsufficientData}</span>
