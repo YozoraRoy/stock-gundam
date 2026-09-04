@@ -2,7 +2,7 @@ name: Sync odd-lot trades (TWSE TWT53U)
 
 on:
   schedule:
-    # 每週一至五 台灣時間 15:10 (UTC 07:10) — TWSE 盤後零股約 15:00 公布後抓取
+    # 每週一至五 台灣時間 15:10 (UTC 07:10)，TWSE 盤後零股約 15:00 公布後抓取
     - cron: '10 7 * * 1-5'
   workflow_dispatch:
 
@@ -16,9 +16,8 @@ jobs:
       - name: Compute Taiwan trading date (Asia/Taipei)
         id: date
         run: |
-          # 用 Asia/Taipei 時區算「今天」；若非交易日則往前推到最近交易日。
+          # 以 Asia/Taipei 時區計算「今天」；若為六日則回推到最近交易日。
           TODAY=$(TZ='Asia/Taipei' date +%Y%m%d)
-          # 最小限度嘗試針對非交易日（六日）回推，與伺服器端邏輯一致；假日檔期較細這裡以最近周五為回退。
           DOW=$(TZ='Asia/Taipei' date +%u)
           if [ "$DOW" = "6" ]; then
             TARGET=$(TZ='Asia/Taipei' date -d '-1 day' +%Y%m%d)
