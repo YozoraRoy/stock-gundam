@@ -108,14 +108,6 @@ export default async function Home() {
 
   const features = [
     {
-      href: '/analyze',
-      icon: Search,
-      title: dict.home.aiAnalyzeTitle,
-      desc: dict.home.aiAnalyzeDesc,
-      accent: 'accent',
-      developing: false,
-    },
-    {
       href: '/odd-lot',
       icon: PieChart,
       title: dict.home.oddLotTitle,
@@ -137,6 +129,14 @@ export default async function Home() {
       title: dict.home.portfolioTitle,
       desc: dict.home.portfolioDesc,
       accent: 'green',
+      developing: false,
+    },
+    {
+      href: '/analyze',
+      icon: Search,
+      title: dict.home.aiAnalyzeTitle,
+      desc: dict.home.aiAnalyzeDesc,
+      accent: 'accent',
       developing: false,
     },
     {
