@@ -71,7 +71,7 @@ jobs:
               DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               DATABASE_PATH=/home/data/stock.db \
               AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
-              AUTH_BASE_URL=https://stock-platform-roy.azurewebsites.net \
+              AUTH_BASE_URL=https://vestential.com \
               GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
               GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
               LINE_CLIENT_ID="${{ secrets.LINE_CLIENT_ID }}" \

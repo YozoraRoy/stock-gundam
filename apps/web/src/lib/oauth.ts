@@ -84,7 +84,7 @@ export function getAuthBaseUrl(req?: { headers: Headers }): string {
     const host = req.headers.get('x-forwarded-host') || req.headers.get('host')
     if (host) return `${proto}://${host}`
   }
-  return process.env.NODE_ENV === 'production' ? 'https://stock-platform-roy.azurewebsites.net' : 'http://localhost:3000'
+  return process.env.NODE_ENV === 'production' ? 'https://vestential.com' : 'http://localhost:3000'
 }
 
 function base64UrlEncode(buf: ArrayBuffer | Uint8Array): string {

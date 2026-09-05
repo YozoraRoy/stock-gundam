@@ -262,7 +262,7 @@ git push origin main   # ← 自動觸發部署
 | `LINE_CLIENT_ID` | LINE Channel ID | `LINE_CLIENT_ID` |
 | `LINE_CLIENT_SECRET` | LINE Channel Secret | `LINE_CLIENT_SECRET` |
 
-> `AUTH_BASE_URL` 為固定值 `https://stock-platform-roy.azurewebsites.net`，直接寫死在 `deploy.yml`，不需設為 Secret。部署時 `deploy.yml` 會把上表各 Secret 寫入 Azure App Settings。
+> `AUTH_BASE_URL` 為固定值 `https://vestential.com`，直接寫死在 `deploy.yml`，不需設為 Secret。部署時 `deploy.yml` 會把上表各 Secret 寫入 Azure App Settings。
 
 **線上監看**：`gh run watch` 或 GitHub → Actions 頁面。
 
@@ -283,7 +283,7 @@ git push origin main   # ← 自動觸發部署
 | `LINE_CLIENT_ID` | LINE Developers | LINE 登入的 Channel ID（當 client id） |
 | `LINE_CLIENT_SECRET` | LINE Developers | LINE 登入的 Channel Secret（當 client secret） |
 | `AUTH_SECRET` | 自己產生 | 簽署登入 session JWT，**禁止進 repo** |
-| `AUTH_BASE_URL` | 固定值 | callback 網址用的 base（部署時寫死，不需設 secret） |
+| `AUTH_BASE_URL` | 固定值（`https://vestential.com`） | callback 網址用的 base（部署時寫死，不需設 secret） |
 
 > **安全性**：`CLIENT_SECRET` 與 `AUTH_SECRET` 只放本機 `.env.local`、GitHub Secret、Azure App Settings。**絕不可 commit 進 repo。**
 
@@ -294,7 +294,7 @@ git push origin main   # ← 自動觸發部署
 3. Application type 選 **Web application**。
 4. 在 **Authorized redirect URIs** 加入 callback 網址（`/api/auth/callback/google` 結尾）：
    - 本機：`http://localhost:3000/api/auth/callback/google`
-   - 線上：`https://<你的網域名>.azurewebsites.net/api/auth/callback/google`
+   - 線上：`https://vestential.com/api/auth/callback/google`
 5. 建立後記下 **Client ID** 與 **Client Secret**。
 
 > 若 OK 畫面蘭第三方帳號，需把 OAuth consent screen 的測試狀態設為 published。
@@ -307,7 +307,7 @@ git push origin main   # ← 自動觸發部署
    - 使用 LINE 帳號登入 → 建立一個 **Provider** → **Create a LINE Login channel**。
 2. 填基本資訊後，進入 channel 的 **LINE Login → Settings**。
 3. 在 **Redirect URI** 加入線上 callback：
-   - `https://<stock-app名>.azurewebsites.net/api/auth/callback/line`
+   - 線上 callbacks：`https://vestential.com/api/auth/callback/line`（與 `https://stock-platform-roy.azurewebsites.net/api/auth/callback/line` 需與 `AUTH_BASE_URL` 一致）
 4. 記下 **Channel ID**（當 client id）與 **Channel Secret**（當 client secret）。
 5. （選擇性）若要取得 user email：在 channel 開 **email permission** 並送審；MVP 未開也能登入（email 為 NULL）。
 
@@ -331,7 +331,7 @@ openssl rand -base64 32
 | Google Client ID / Secret | ✅（callback 加 localhost） | ✅ |
 | LINE Client ID / Secret | ❌（LINE 禁 localhost，用 dev-login 測） | ✅ |
 | AUTH_SECRET | ✅ | ✅ |
-| AUTH_BASE_URL | 可略或填 `http://localhost:3000` | ✅ 固定寫死線上網址 |
+| AUTH_BASE_URL | 可略或填 `http://localhost:3000` | ✅ 固定寫死 `https://vestential.com` |
 
 #### 設定位置
 
@@ -346,7 +346,7 @@ openssl rand -base64 32
 **LINE 無法本機測**
 LINE 不允許 localhost callback，請用 `/api/auth/dev-login` 或先在線上驗證 LINE。
 
-* **線上體驗網站**：[https://stock-platform-roy.azurewebsites.net](https://stock-platform-roy.azurewebsites.net)
+* **線上體驗網站**：[https://vestential.com](https://vestential.com)
 * **GitHub 倉庫**：[https://github.com/YozoraRoy/vestential](https://github.com/YozoraRoy/vestential)
 
 ---

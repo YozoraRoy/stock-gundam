@@ -1,3 +1,5 @@
+import type { AnalysisLanguage } from './analysis.js'
+
 export enum Market {
   TW = 'TW',
   US = 'US',
@@ -90,7 +92,7 @@ export interface AnalysisState {
   assetType: AssetType
   instrumentContext: string
   pastContext: string
-  outputLanguage: string
+  outputLanguage: AnalysisLanguage
   outputInstruction: string
   marketReport: string
   sentimentReport: string

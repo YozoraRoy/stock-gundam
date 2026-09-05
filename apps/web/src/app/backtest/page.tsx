@@ -1085,7 +1085,7 @@ export default function BacktestPage() {
                                             <th className="px-3 py-1.5 text-left">{ui.tableHeaderEntryDate}</th>
                                             <th className="px-3 py-1.5 text-left">{ui.tableHeaderEntryPrice}</th>
                                             <th className="px-3 py-1.5 text-left">{ui.tableHeaderResult}</th>
-                                            <th className="px-3 py-1.5 text-left">{ui.tableHeaderDaysToTarget.replace('{pct}', targetPct || '8')}</th>
+                                            <th className="px-3 py-1.5 text-left">{ui.tableHeaderDaysToTarget.replace('{pct}', targetPct || '25')}</th>
                                           </tr>
                                         </thead>
                                         <tbody>
