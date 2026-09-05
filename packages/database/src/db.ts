@@ -199,6 +199,16 @@ function getSqliteDb(): Database.Database | null {
         created_at TEXT DEFAULT (datetime('now', 'localtime'))
       );
       CREATE INDEX IF NOT EXISTS idx_portfolio_user ON portfolio_records(user_id, id);
+      CREATE TABLE IF NOT EXISTS market_focus (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL,
+        source TEXT,
+        published_at TEXT,
+        reason TEXT,
+        created_at TEXT DEFAULT (datetime('now', 'localtime'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_market_focus_created ON market_focus(created_at);
 
       UPDATE odd_lot_trades SET price = 34.15, volume = 19443, bid_price = 34.15, bid_volume = 8943, ask_price = 34.20, ask_volume = 6092 WHERE stock_id = '2887';
       UPDATE shareholder_gifts SET gift_name = '多用途矽膠隔熱餐墊(二入)', last_buy_date = '08/14' WHERE stock_id = '2887';
@@ -398,6 +408,22 @@ async function getAzurePool(): Promise<sql.ConnectionPool | null> {
           created_at           DATETIME DEFAULT GETDATE()
         );
         CREATE INDEX idx_portfolio_user ON portfolio_records(user_id, id);
+      END
+    `)
+
+    await _pool.request().query(`
+      IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'market_focus')
+      BEGIN
+        CREATE TABLE market_focus (
+          id           INT IDENTITY(1,1) PRIMARY KEY,
+          title        NVARCHAR(500) NOT NULL,
+          url          NVARCHAR(2000) NOT NULL,
+          source       NVARCHAR(200),
+          published_at NVARCHAR(100),
+          reason       NVARCHAR(MAX),
+          created_at   DATETIME DEFAULT GETDATE()
+        );
+        CREATE INDEX idx_market_focus_created ON market_focus(created_at);
       END
     `)
 
@@ -1311,6 +1337,42 @@ export async function getHistoricalGifts(stockId: string): Promise<HistoricalGif
     }
   }
   return []
+}
+
+// ─── Market Focus (首頁 AI 篩選新聞) ─────────────────────────────
+export interface MarketFocusItem {
+  id?: number
+  title: string
+  url: string
+  source: string | null
+  published_at: string | null
+  reason: string | null
+  created_at?: string
+}
+
+/** 全量取代 market_focus 內容（每次 refresh 重新挑選一輪新聞）。 */
+export async function saveMarketFocus(items: MarketFocusItem[]): Promise<void> {
+  await dbExecute('DELETE FROM market_focus')
+  for (const it of items) {
+    if (!it.title || !it.url) continue
+    await dbExecute(
+      'INSERT INTO market_focus (title, url, source, published_at, reason) VALUES (@title, @url, @source, @published_at, @reason)',
+      {
+        title: it.title.slice(0, 500),
+        url: it.url.slice(0, 2000),
+        source: it.source ? it.source.slice(0, 200) : null,
+        published_at: it.published_at ? it.published_at.slice(0, 100) : null,
+        reason: it.reason ?? null,
+      },
+    )
+  }
+}
+
+/** 讀取最新一輪市場焦點新聞。 */
+export async function getMarketFocus(limit: number = 6): Promise<MarketFocusItem[]> {
+  return dbQueryAll<MarketFocusItem>(
+    `SELECT id, title, url, source, published_at, reason FROM market_focus ORDER BY id DESC LIMIT ${limit}`,
+  )
 }
 
 // ─── Users / Auth / Quota ────────────────────────────────────────

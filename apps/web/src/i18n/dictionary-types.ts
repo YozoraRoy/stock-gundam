@@ -39,6 +39,13 @@ export interface Dict {
   }
   home: {
     heroQuotes: Quote[]
+    metaTitle: string
+    metaDesc: string
+    heroTitle: string
+    heroSubtitle: string
+    marketFocusTitle: string
+    marketFocusSubtitle: string
+    marketFocusEmpty: string
     aiAnalyzeTitle: string
     aiAnalyzeDesc: string
     oddLotTitle: string

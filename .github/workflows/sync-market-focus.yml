@@ -1,0 +1,30 @@
+name: Sync market focus (AI-filtered news)
+
+on:
+  schedule:
+    # 每 4 小時一次(UTC):06:00 / 10:00 / 14:00 / 18:00 對應 TW 14:00 / 18:00 / 22:00 / 02:00
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trigger market-focus refresh on Azure
+        run: |
+          CODE=$(curl -s -o /tmp/mf_resp.json -w "%{http_code}" \
+            --max-time 300 \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.SYNC_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            "https://vestential.com/api/market-focus/refresh")
+          echo "HTTP $CODE"
+          cat /tmp/mf_resp.json
+          echo ""
+          if [ "$CODE" != "200" ]; then
+            echo "::error::market-focus refresh failed (HTTP $CODE)"
+            exit 1
+          fi
