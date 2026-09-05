@@ -36,6 +36,11 @@ export default async function AboutPage() {
         </section>
 
         <section>
+          <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-3">{d.nameTitle}</h2>
+          <p>{d.nameDesc}</p>
+        </section>
+
+        <section>
           <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-3">{d.visionTitle}</h2>
           <p className="mb-4">{d.visionP1}</p>
           <p className="mb-4">{d.visionP2}</p>

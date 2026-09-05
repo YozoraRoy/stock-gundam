@@ -83,6 +83,8 @@ export const en: Dict = {
     title: 'About Vestential',
     hero1: 'Vestential is an investment information platform built for working professionals and everyday investors starting with smaller amounts.',
     hero2: 'For many working professionals, the biggest challenge in investing is not a lack of interest, but a lack of time and expertise to keep up with the vast and complex flow of market information. With news, opinions, and price movements changing every day, it can be difficult to know where the market stands\u2014or whether now may be a relatively reasonable time to start building a position.',
+    nameTitle: 'Where the Name Comes From',
+    nameDesc: 'Vestential = Vest + Essential. "Vest" stands for investing, "Essential" stands for indispensable — we aspire for Vestential to become the essential toolkit on your value-investing journey.',
     visionTitle: 'Our Vision',
     visionP1: 'Vestential combines investment methodology with the concept of market cycles to distill complex market information into a simple, quantifiable, and repeatable framework. Our goal is to help everyday investors better understand where the market stands and use that perspective as an information reference when considering their investment decisions.',
     visionP2: 'By combining quantitative signals, fractional-share investing, disciplined investing practices, and AI-assisted analysis, we aim to reduce reliance on emotion, luck, and hot tips. This gives working professionals and everyday investors\u2014especially those with limited time\u2014a simpler way to develop their own investment discipline, one step at a time.',

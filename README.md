@@ -1,5 +1,7 @@
 # Vestential 台灣股票 AI 分析與零股紀念品情報平台
 
+> **名稱由來**:**Vestential = Vest + Essential**。Vest 代表「投資」、Essential 代表「不可或缺」——期許 Vestential 能成為你在[價值投資](https://vestential.com/about)路上的必備工具。
+
 基於 Next.js 15 與多 AI 代理人 (Multi-Agent Architecture) 打造的台灣股票與美股 AI 深度分析、零股盤後行情、股東會紀念品情報與個人損益試算平台。
 
 ---

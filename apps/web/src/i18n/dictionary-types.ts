@@ -59,6 +59,8 @@ export interface Dict {
     title: string
     hero1: string
     hero2: string
+    nameTitle: string
+    nameDesc: string
     visionTitle: string
     visionP1: string
     visionP2: string
