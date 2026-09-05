@@ -83,6 +83,11 @@ export const en: Dict = {
     agentTitle: 'AI Agent Trading Watch',
     agentDesc: 'Observe AI agents\u2019 trading decisions, position changes, and performance in real time.',
     inDevelopment: 'In Development',
+    coreFeaturesTitle: 'Core Features',
+    ctaAnalyze: 'Start AI Analysis',
+    ctaOddLot: 'View Odd-Lot Data',
+    ctaUse: 'Use now',
+    disclaimerShort: 'Investing involves risks. The information on this platform is for reference only and does not constitute investment advice.',
   },
   about: {
     metaTitle: 'About Vestential — Investment Information for Working Professionals',

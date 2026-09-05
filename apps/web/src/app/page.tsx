@@ -1,17 +1,42 @@
-import { Search, PieChart, Wallet, Activity, BarChart3, Bot, Newspaper } from 'lucide-react'
+import {
+  Search,
+  PieChart,
+  Wallet,
+  Activity,
+  BarChart3,
+  Bot,
+  Newspaper,
+  Sparkles,
+  ArrowRight,
+  ArrowUpRight,
+} from 'lucide-react'
 import Link from 'next/link'
 import { getDict, getLocale } from '@/i18n/server'
 import { localizePath } from '@/i18n/paths'
 import { buildAlternates } from '@/i18n/metadata'
 import { getMarketFocus } from '@stock/database'
 
+const BASE_URL = 'https://vestential.com'
+
 export async function generateMetadata() {
   const dict = await getDict()
   const locale = await getLocale()
+  const alts = buildAlternates(locale, '/')
   return {
     title: dict.home.metaTitle,
     description: dict.home.metaDesc,
-    alternates: buildAlternates(locale, '/'),
+    alternates: alts,
+    openGraph: {
+      title: dict.home.metaTitle,
+      description: dict.home.metaDesc,
+      url: alts.canonical,
+      siteName: 'Vestential',
+      type: 'website',
+      locale: locale === 'zh-TW' ? 'zh_TW' : locale,
+    },
+    twitter: {
+      card: 'summary_large_image',
+    },
   }
 }
 
@@ -34,51 +59,193 @@ export default async function Home() {
   const showEnglish = Boolean(main)
   const focus = await getMarketFocus(6)
 
-  const schema = {
-    '@context': 'https://schema.org',
-    '@graph': [
-      {
-        '@type': 'WebSite',
-        name: 'Vestential',
-        url: 'https://vestential.com',
-        description: dict.home.metaDesc,
-        inLanguage: ['zh-TW', 'en', 'ja'],
-      },
-      {
-        '@type': 'Organization',
-        name: 'Vestential',
-        url: 'https://vestential.com',
-        description: dict.home.metaDesc,
-        slogan: 'Vestential = Vest + Essential',
-      },
-    ],
+  const graph: object[] = [
+    {
+      '@type': 'WebSite',
+      name: 'Vestential',
+      url: BASE_URL,
+      description: dict.home.metaDesc,
+      inLanguage: ['zh-TW', 'en', 'ja'],
+    },
+    {
+      '@type': 'Organization',
+      name: 'Vestential',
+      url: BASE_URL,
+      description: dict.home.metaDesc,
+      slogan: 'Vestential = Vest + Essential',
+    },
+    {
+      '@type': 'WebPage',
+      name: dict.home.metaTitle,
+      description: dict.home.metaDesc,
+      url: `${BASE_URL}/`,
+      inLanguage: locale,
+      isPartOf: { '@type': 'WebSite', name: 'Vestential', url: BASE_URL },
+      dateModified: focus[0]?.published_at
+        ? new Date(focus[0].published_at).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10),
+    },
+  ]
+  if (focus.length > 0) {
+    graph.push({
+      '@type': 'ItemList',
+      name: dict.home.marketFocusTitle,
+      itemListElement: focus.map((item, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: item.title,
+        url: item.url,
+        ...(item.published_at ? { datePublished: new Date(item.published_at).toISOString() } : {}),
+      })),
+    })
   }
+  const schema = { '@context': 'https://schema.org', '@graph': graph }
+
+  const cardBase =
+    'group bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 transition-all duration-200 flex flex-col relative overflow-hidden'
+  const cardHover =
+    ' hover:border-[var(--accent)]/60 hover:-translate-y-0.5 hover:shadow-[0_10px_34px_rgba(79,140,255,0.16)]'
+
+  const features = [
+    {
+      href: '/analyze',
+      icon: Search,
+      title: dict.home.aiAnalyzeTitle,
+      desc: dict.home.aiAnalyzeDesc,
+      accent: 'accent',
+      developing: false,
+    },
+    {
+      href: '/odd-lot',
+      icon: PieChart,
+      title: dict.home.oddLotTitle,
+      desc: dict.home.oddLotDesc,
+      accent: 'green',
+      developing: false,
+    },
+    {
+      href: '/backtest',
+      icon: Activity,
+      title: dict.home.backtestTitle,
+      desc: dict.home.backtestDesc,
+      accent: 'green',
+      developing: false,
+    },
+    {
+      href: '/portfolio',
+      icon: Wallet,
+      title: dict.home.portfolioTitle,
+      desc: dict.home.portfolioDesc,
+      accent: 'green',
+      developing: false,
+    },
+    {
+      href: null,
+      icon: BarChart3,
+      title: dict.home.optionsTitle,
+      desc: dict.home.optionsDesc,
+      accent: 'accent',
+      developing: true,
+    },
+    {
+      href: null,
+      icon: Bot,
+      title: dict.home.agentTitle,
+      desc: dict.home.agentDesc,
+      accent: 'green',
+      developing: true,
+    },
+  ] as const
 
   return (
-    <div className="max-w-5xl mx-auto w-full px-4 py-8 md:py-10 text-center">
-      <section aria-label={dict.home.heroTitle} className="mb-10">
-        <h1 className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] mb-3">{dict.home.heroTitle}</h1>
-        <p className="max-w-2xl mx-auto text-base text-[var(--text-secondary)] leading-relaxed mb-8">
+    <div className="max-w-5xl mx-auto w-full px-4 py-8 md:py-10">
+      {/* ① Hero */}
+      <section aria-label={dict.home.heroTitle} className="text-center mb-12">
+        <h1 className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] mb-3">
+          {dict.home.heroTitle}
+        </h1>
+        <div className="mx-auto mb-4 w-16 h-1 rounded-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent-green)]" />
+        <p className="max-w-2xl mx-auto text-base text-[var(--text-secondary)] leading-relaxed">
           {dict.home.heroSubtitle}
         </p>
-        <figure className="bg-[var(--bg-card)] rounded-xl px-6 py-4 border border-white/5 max-w-2xl mx-auto">
-          <blockquote className="text-[var(--text-primary)] text-base md:text-lg leading-relaxed mb-2">
-            <span className="text-[var(--accent)] text-xl leading-none mr-1 align-top" aria-hidden="true">{'\u201C'}</span>
-            {main ?? q.en}
-            <span className="text-[var(--accent)] text-xl leading-none ml-1 align-bottom" aria-hidden="true">{'\u201D'}</span>
-          </blockquote>
-          {showEnglish && (
-            <p className="text-sm italic text-[var(--text-secondary)] mb-2">
-              {q.en}
-            </p>
-          )}
-          <figcaption className="text-sm text-[var(--text-secondary)] text-right">
-            — {q.author}
-          </figcaption>
-        </figure>
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-7">
+          <Link
+            href={localizePath(locale, '/analyze')}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[var(--accent)] text-white font-semibold hover:opacity-90 hover:-translate-y-0.5 transition-all shadow-[0_8px_24px_rgba(79,140,255,0.25)]"
+          >
+            <Sparkles className="w-4 h-4" />
+            {dict.home.ctaAnalyze}
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+          <Link
+            href={localizePath(locale, '/odd-lot')}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-white/15 text-[var(--text-primary)] font-medium hover:border-[var(--accent)]/60 hover:text-[var(--accent)] hover:-translate-y-0.5 transition-all"
+          >
+            <PieChart className="w-4 h-4" />
+            {dict.home.ctaOddLot}
+          </Link>
+        </div>
       </section>
 
-      <section aria-label={dict.home.marketFocusTitle} className="mb-10 text-left">
+      {/* ② Core features */}
+      <section aria-labelledby="core-features" className="mb-14">
+        <div className="flex items-center gap-2 mb-6">
+          <Sparkles className="w-5 h-5 text-[var(--accent)]" />
+          <h2 id="core-features" className="text-xl font-bold text-[var(--text-primary)]">
+            {dict.home.coreFeaturesTitle}
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+          {features.map((f) => {
+            const Icon = f.icon
+            const accentCls =
+              f.accent === 'accent'
+                ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                : 'bg-[var(--accent-green)]/15 text-[var(--accent-green)]'
+            const inner = (
+              <>
+                <div className="flex items-start justify-between mb-3">
+                  <span className={`w-11 h-11 rounded-xl flex items-center justify-center ${accentCls}`}>
+                    <Icon className="w-6 h-6" />
+                  </span>
+                  {f.developing && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-[var(--text-secondary)]">
+                      {dict.home.inDevelopment}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-base font-semibold text-[var(--text-primary)] mb-1.5">
+                  {f.title}
+                </h3>
+                <p className="text-sm text-[var(--text-secondary)] leading-relaxed flex-1">
+                  {f.desc}
+                </p>
+                {!f.developing && (
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent)]">
+                    {dict.home.ctaUse}
+                    <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                )}
+              </>
+            )
+            if (f.developing) {
+              return (
+                <div key={f.title} className={`${cardBase} opacity-80 select-none`}>
+                  {inner}
+                </div>
+              )
+            }
+            return (
+              <Link key={f.title} href={localizePath(locale, f.href!)} className={`${cardBase}${cardHover}`}>
+                {inner}
+              </Link>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* ③ Market focus */}
+      <section aria-label={dict.home.marketFocusTitle} className="mb-12">
         <div className="flex items-center gap-2 mb-1">
           <Newspaper className="w-4 h-4 text-[var(--accent)]" />
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">{dict.home.marketFocusTitle}</h2>
@@ -88,14 +255,18 @@ export default async function Home() {
         {focus.length > 0 ? (
           <ul className="grid grid-cols-1 gap-3">
             {focus.map((item) => (
-              <li key={item.id} className="bg-[var(--bg-card)] rounded-xl p-4 border border-white/5">
+              <li
+                key={item.id}
+                className="bg-[var(--bg-card)] rounded-xl p-4 border border-white/5 hover:border-white/10 transition"
+              >
                 <a
                   href={item.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[var(--text-primary)] font-medium leading-snug hover:text-[var(--accent)] transition"
+                  className="group flex items-start gap-2 text-[var(--text-primary)] font-medium leading-snug hover:text-[var(--accent)] transition"
                 >
-                  {item.title}
+                  <span className="flex-1">{item.title}</span>
+                  <ArrowUpRight className="w-4 h-4 mt-0.5 shrink-0 text-[var(--text-secondary)] group-hover:text-[var(--accent)] transition" />
                 </a>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-secondary)] mt-1.5">
                   {item.source && <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10">{item.source}</span>}
@@ -114,85 +285,23 @@ export default async function Home() {
         )}
       </section>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 text-left">
-        <Link
-          href={localizePath(locale, '/odd-lot')}
-          className="bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left flex flex-col"
-        >
-          <div className="flex items-start justify-between mb-3">
-            <PieChart className="w-7 h-7 text-[var(--accent-green)]" />
-          </div>
-          <h2 className="text-lg font-semibold mb-1.5">{dict.home.oddLotTitle}</h2>
-          <p className="text-base text-[var(--text-secondary)] flex-1">
-            {dict.home.oddLotDesc}
-          </p>
-        </Link>
-
-        <Link
-          href={localizePath(locale, '/backtest')}
-          className="bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left flex flex-col"
-        >
-          <div className="flex items-start justify-between mb-3">
-            <Activity className="w-7 h-7 text-[var(--accent-green)]" />
-          </div>
-          <h2 className="text-lg font-semibold mb-1.5">{dict.home.backtestTitle}</h2>
-          <p className="text-base text-[var(--text-secondary)] flex-1">
-            {dict.home.backtestDesc}
-          </p>
-        </Link>
-
-        <Link
-          href={localizePath(locale, '/portfolio')}
-          className="bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left flex flex-col"
-        >
-          <div className="flex items-start justify-between mb-3">
-            <Wallet className="w-7 h-7 text-[var(--accent-green)]" />
-          </div>
-          <h2 className="text-lg font-semibold mb-1.5">{dict.home.portfolioTitle}</h2>
-          <p className="text-base text-[var(--text-secondary)] flex-1">
-            {dict.home.portfolioDesc}
-          </p>
-        </Link>
-
-        <Link
-          href={localizePath(locale, '/analyze')}
-          className="bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 hover:border-[var(--accent)]/50 transition group text-left flex flex-col"
-        >
-          <div className="flex items-start justify-between mb-3">
-            <Search className="w-7 h-7 text-[var(--accent)]" />
-          </div>
-          <h2 className="text-lg font-semibold mb-1.5">{dict.home.aiAnalyzeTitle}</h2>
-          <p className="text-base text-[var(--text-secondary)] flex-1">
-            {dict.home.aiAnalyzeDesc}
-          </p>
-        </Link>
-
-        <div className="relative bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 opacity-70 select-none flex flex-col">
-          <div className="flex items-start justify-between mb-3">
-            <BarChart3 className="w-7 h-7 text-[var(--accent)]" />
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-[var(--text-secondary)]">
-              {dict.home.inDevelopment}
-            </span>
-          </div>
-          <h2 className="text-lg font-semibold mb-1.5">{dict.home.optionsTitle}</h2>
-          <p className="text-base text-[var(--text-secondary)] flex-1">
-            {dict.home.optionsDesc}
-          </p>
-        </div>
-
-        <div className="relative bg-[var(--bg-card)] rounded-xl p-5 border border-white/5 opacity-70 select-none flex flex-col">
-          <div className="flex items-start justify-between mb-3">
-            <Bot className="w-7 h-7 text-[var(--accent-green)]" />
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-[var(--text-secondary)]">
-              {dict.home.inDevelopment}
-            </span>
-          </div>
-          <h2 className="text-lg font-semibold mb-1.5">{dict.home.agentTitle}</h2>
-          <p className="text-base text-[var(--text-secondary)] flex-1">
-            {dict.home.agentDesc}
-          </p>
-        </div>
-      </div>
+      {/* ④ Quote band */}
+      <section aria-label="Investment quotes" className="mb-4">
+        <figure className="bg-[var(--bg-secondary)]/60 rounded-2xl px-6 py-5 border border-white/5 text-center">
+          <blockquote className="text-[var(--text-primary)] text-base md:text-lg leading-relaxed mb-2">
+            <span className="text-[var(--accent)] text-xl leading-none mr-1 align-top" aria-hidden="true">{'\u201C'}</span>
+            {main ?? q.en}
+            <span className="text-[var(--accent)] text-xl leading-none ml-1 align-bottom" aria-hidden="true">{'\u201D'}</span>
+          </blockquote>
+          {showEnglish && (
+            <p className="text-sm italic text-[var(--text-secondary)] mb-2">{q.en}</p>
+          )}
+          <figcaption className="text-sm text-[var(--text-secondary)]">— {q.author}</figcaption>
+        </figure>
+        <p className="mt-4 text-center text-xs text-[var(--text-secondary)]">
+          {dict.home.disclaimerShort}
+        </p>
+      </section>
 
       <script
         type="application/ld+json"

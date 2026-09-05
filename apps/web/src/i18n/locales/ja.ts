@@ -83,6 +83,11 @@ export const ja: Dict = {
     agentTitle: 'AI エージェント取引監視',
     agentDesc: 'AI エージェントの取引判断、ポジション変動、パフォーマンスをリアルタイムで観察できます。',
     inDevelopment: '開発中',
+    coreFeaturesTitle: 'コア機能',
+    ctaAnalyze: 'AI分析を開始',
+    ctaOddLot: '単元未満株を見る',
+    ctaUse: '今すぐ使う',
+    disclaimerShort: '投資にはリスクが伴います。本サービスの情報は参考用であり、投資助言を構成するものではありません。',
   },
   about: {
     metaTitle: 'Vestential について — 会社員・小口投資家のための投資情報プラットフォーム',

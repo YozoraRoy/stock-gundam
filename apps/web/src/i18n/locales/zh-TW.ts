@@ -83,6 +83,11 @@ export const zhTW: Dict = {
     agentTitle: 'AI Agent 交易觀測',
     agentDesc: '即時觀察 AI Agent 的交易決策過程、持倉變動與績效表現。',
     inDevelopment: '開發中',
+    coreFeaturesTitle: '核心功能',
+    ctaAnalyze: '開始 AI 分析',
+    ctaOddLot: '看零股情報',
+    ctaUse: '立即使用',
+    disclaimerShort: '投資有風險,本平台資訊僅供參考,不構成投資建議。',
   },
   about: {
     metaTitle: '關於 Vestential — 上班族與小資族的投資資訊參考平台',

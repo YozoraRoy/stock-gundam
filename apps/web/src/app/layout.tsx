@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
@@ -10,6 +10,10 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://vestential.com'),
   title: 'Vestential',
   description: 'AI-powered stock analysis platform for working professionals: quarterly-line deviation, odd-lot accumulation, P&L tracking, and AI analysis.',
+}
+
+export const viewport: Viewport = {
+  themeColor: '#0f1118',
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
