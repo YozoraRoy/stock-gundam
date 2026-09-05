@@ -12,8 +12,8 @@
 
 | 頁面 | 路由 | 說明 | 需登入 |
 |------|------|------|--------|
-| 🏠 首頁 | `/` | 功能入口與簡介 + AI 市場焦點新聞（標題/來源/時間/AI 摘要） | 否 |
-| 📰 AI 市場焦點 | `/` (首頁區塊) | Google News RSS + AI 價值投資過濾，每 4 小時自動更新 6 則 | 否 |
+| 🏠 首頁 | `/` | 功能優先版面：核心功能 CTA 卡片 + AI 市場焦點新聞 + 投資名言收尾 | 否 |
+| 📰 AI 市場焦點 | `/` (首頁區塊) | Google News RSS + AI 價值投資過濾，每 4 小時更新近 2 天新聞 6 則（新到舊排序） | 否 |
 | 🤖 AI 智能分析 | `/analyze` | 8-Agent 台股/美股深度分析（每日額度，未登入自動跳轉登入頁） | 是 |
 | 🎁 零股情報 | `/odd-lot` | 零股行情與股東會紀念品情報 | 否 |
 | 💰 個人損益試算 | `/portfolio` | 損益試算 + AI 圖片辨識批次上傳 + AI 投資建議 + 歷史紀錄 | 是 |
@@ -109,9 +109,16 @@
 
 ### 🔖 10. 首頁 AI 市場焦點 (`/` Market Focus)
 * **Google News RSS 即時新聞抓取**：首頁「市場焦點」區塊以 Google News RSS（`hl=zh-TW&gl=TW&ceid=TW:zh-Hant`）抓取「台股 大盤」與「台股 除息 股利 OR 價值投資 OR 基本面 財報」兩組查詢，解析並合併去重（`lib/market-focus.ts`）。
+* **近 2 天過濾 + 最新優先**：候選新聞僅保留 **發布 2 天內** 之作，並以 ISO 8601 正規化 `published_at` 後依時間 **新到舊** 排序；DB `getMarketFocus` 另以 `ORDER BY published_at DESC, id DESC` 雙保險，杜絕過期舊聞或亂序展示。
 * **AI 價值投資過濾與摘要**：排程呼叫 LLM，依「價值投資」精神篩選新聞並產出一句摘要（`filterNewsByAI`）；LLM 失敗時自動 fallback 原樣前 6 則，首頁渲染永遠不會因 AI 或 RSS 異常而變慢或報錯。
 * **日夜自動更新**：`.github/workflows/sync-market-focus.yml` 每 **4 小時**以 `Authorization: Bearer SYNC_TOKEN` 呼叫 `POST /api/market-focus/refresh`（亦支援手動 `workflow_dispatch`），寫入 `market_focus` 資料表後 `revalidateTag('market-focus')` 刷新首頁。
-* **首頁呈現**：6 張新聞卡片（標題 / 來源 / 發布時間 / AI 摘要），三語系完整呈現；首頁同時具備 `<h1>`、`generateMetadata`（三語 meta）與 JSON-LD `WebSite` / `Organization`，強化 SEO。
+* **首頁呈現**：每則新聞卡片顯示標題 / 來源 / 發布時間 / AI 摘要，三語系完整呈現。
+
+### 💻 11. 首頁版面與 SEO (`/`)
+* **功能優先版面**：由上而下為 **① 精簡 Hero**（H1＋副標＋2 顆主 CTA：開始 AI 分析 / 看零股情報）→ **② 核心功能 6 卡**（依 `/about`「如何開始」STEP 1→2→3 順序：零股情報→週期進場→損益試算→AI 分析，再墊開發中卡）→ **③ 市場焦點** → **④ 投資名言收尾帶**（附投資風險免責一行）。
+* **轉換元素**：每張功能卡具「立即使用 →」CTA，附 hover 上移與 accent 光暈回饋；開發中卡以「開發中」徽章標記、不提供死連結。
+* **結構化資料**：首頁 JSON-LD `@graph` 含 `WebSite`＋`Organization`＋`WebPage`（inLanguage/dateModified），新聞存在時附 `ItemList`（title/url/datePublished），強化「新鮮內容」訊號。
+* **社群分享圖 (OG)**：`apps/web/src/app/opengraph-image.tsx` 以 `next/og` 動態產生 1200×630 品牌漸層分享圖（零靜態素材）；metadata 帶 `openGraph`＋`twitter:card=summary_large_image`；`layout.tsx` 輸出 `theme-color=#0f1118`。
 
 ---
 
