@@ -12,7 +12,8 @@
 
 | 頁面 | 路由 | 說明 | 需登入 |
 |------|------|------|--------|
-| 🏠 首頁 | `/` | 功能入口與簡介 | 否 |
+| 🏠 首頁 | `/` | 功能入口與簡介 + AI 市場焦點新聞（標題/來源/時間/AI 摘要） | 否 |
+| 📰 AI 市場焦點 | `/` (首頁區塊) | Google News RSS + AI 價值投資過濾，每 4 小時自動更新 6 則 | 否 |
 | 🤖 AI 智能分析 | `/analyze` | 8-Agent 台股/美股深度分析（每日額度，未登入自動跳轉登入頁） | 是 |
 | 🎁 零股情報 | `/odd-lot` | 零股行情與股東會紀念品情報 | 否 |
 | 💰 個人損益試算 | `/portfolio` | 損益試算 + AI 圖片辨識批次上傳 + AI 投資建議 + 歷史紀錄 | 是 |
@@ -106,24 +107,73 @@
 * **動態 Sitemap 與 Robots.txt**：自動生成符合規格之 `sitemap.xml` (`apps/web/src/app/sitemap.ts`) 與 `robots.txt` (`apps/web/src/app/robots.ts`)，完整宣告多語系 alternate 網址與頻率，利於 Google 等搜尋引擎精準索引。
 * **資訊架構與視覺層次優化 (Typography Hierarchy)**：精心調校 `/about` 關於我們、`/backtest` 回測與 `/analyze` 分析頁面的字體階層、間距與對比度，提供一致且現代的金融工具視覺體驗。
 
+### 🔖 10. 首頁 AI 市場焦點 (`/` Market Focus)
+* **Google News RSS 即時新聞抓取**：首頁「市場焦點」區塊以 Google News RSS（`hl=zh-TW&gl=TW&ceid=TW:zh-Hant`）抓取「台股 大盤」與「台股 除息 股利 OR 價值投資 OR 基本面 財報」兩組查詢，解析並合併去重（`lib/market-focus.ts`）。
+* **AI 價值投資過濾與摘要**：排程呼叫 LLM，依「價值投資」精神篩選新聞並產出一句摘要（`filterNewsByAI`）；LLM 失敗時自動 fallback 原樣前 6 則，首頁渲染永遠不會因 AI 或 RSS 異常而變慢或報錯。
+* **日夜自動更新**：`.github/workflows/sync-market-focus.yml` 每 **4 小時**以 `Authorization: Bearer SYNC_TOKEN` 呼叫 `POST /api/market-focus/refresh`（亦支援手動 `workflow_dispatch`），寫入 `market_focus` 資料表後 `revalidateTag('market-focus')` 刷新首頁。
+* **首頁呈現**：6 張新聞卡片（標題 / 來源 / 發布時間 / AI 摘要），三語系完整呈現；首頁同時具備 `<h1>`、`generateMetadata`（三語 meta）與 JSON-LD `WebSite` / `Organization`，強化 SEO。
+
 ---
 
 ## 🏗️ 專案架構 (Architecture)
+
+### 系統架構圖 (Mermaid)
+
+```mermaid
+flowchart TB
+    Browser["🌐 瀏覽器 (zh-TW / en / ja)"]
+
+    subgraph Actions["GitHub Actions 排程"]
+        MF_Cron["sync-market-focus<br/>每 4 小時"]
+        ODD_Cron["sync-oddlot<br/>每工作日 15:10"]
+    end
+
+    subgraph Az["Azure App Service (vestential.com)"]
+        Next["Next.js 15 App Router<br/>Middleware i18n 語系路由"]
+        MF_Lib["lib/market-focus<br/>Google News RSS 抓取 + LLM 價值投資過濾"]
+        MF_API["API：POST /api/market-focus/refresh"]
+        Pages["頁面：/ /analyze /odd-lot /backtest /portfolio"]
+        WebJob["Azure WebJobs<br/>工作日 14:30 雙爬蟲"]
+    end
+
+    subgraph Data["資料層"]
+        DB[("SQLite / Azure SQL<br/>market_focus · analysis_quota · odd_lot · portfolio_records …")]
+    end
+
+    GNews["📰 Google News RSS（台股頻道）"]
+    LLM["🤖 LLM API（openai-compatible）"]
+    MarketData["📡 TWSE OpenAPI / Yahoo Finance"]
+
+    Browser --> Next
+    MF_Cron -->|Bearer SYNC_TOKEN| MF_API
+    ODD_Cron -->|Bearer SYNC_TOKEN| Next
+    MF_API --> MF_Lib
+    MF_Lib -->|抓取 2 組查詢| GNews
+    MF_Lib -->|AI 過濾 + 摘要| LLM
+    MF_Lib -->|saveMarketFocus| DB
+    Pages -->|getMarketFocus| DB
+    WebJob -->|TWT53U / stock.gift| MarketData
+    WebJob --> DB
+```
+
+### 專案目錄結構
 
 ```
 stock-platform/
 ├── apps/
 │   └── web/                 # Next.js 15 Web 應用程式 (App Router)
 │       ├── src/app/         # 頁面與 API 路由 (/analyze /odd-lot /portfolio /backtest …)
-│       └── src/lib/         # 共享邏輯 (auth、oauth、portfolio 等)
+│       │   └── src/app/api/market-focus/refresh/  # 市場焦點排程 refresh API
+│       └── src/lib/         # 共享邏輯 (auth、oauth、portfolio、market-focus …)
 ├── packages/
 │   ├── ai-engine/           # AI 8-Agent 分析引擎、Symbol Guard 門禁與投資法則分析
 │   ├── backtest/            # 回測引擎
 │   ├── core/                # 共享型別、設定與錯誤定義
-│   ├── database/            # SQLite/SQL Server 資料庫 (雙爬蟲、analysis_quota、portfolio_records)
+│   ├── database/            # SQLite/SQL Server 資料庫 (雙爬蟲、analysis_quota、portfolio_records、market_focus)
 │   └── market-data/         # Yahoo Finance 市場數據 Provider
 ├── App_Data/
 │   └── jobs/triggered/      # Azure WebJobs 自動排程配置 (14:30 每日爬蟲)
+├── .github/workflows/       # GitHub Actions 排程 (sync-oddlot 零股、sync-market-focus 新聞)
 ├── .agents/skills/
 │   └── azure-deploy/        # 專屬 Azure 部署與診斷技能 (SKILL.md)
 └── package.json             # npm workspaces 根目錄
