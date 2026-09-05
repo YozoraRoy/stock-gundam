@@ -91,13 +91,6 @@ export interface Dict {
     methodAi: string
     methodAiLabel: string
     methodAiLink: string
-    featuresTitle: string
-    featureAi: string
-    featureOddLot: string
-    featurePortfolio: string
-    featureBacktest: string
-    featurePrivacy: string
-    featureOpen: string
     startTitle: string
     step1Title: string
     step1Desc: string

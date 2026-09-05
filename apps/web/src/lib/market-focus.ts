@@ -11,12 +11,19 @@ const NEWS_QUERIES = [
 
 const USER_AGENT = 'Mozilla/5.0 (Vestential MarketFocus/1.0)'
 const MAX_CANDIDATES = 30
+const RECENT_DAYS = 2
 
 export interface NewsCandidate {
   title: string
   url: string
   source: string
   publishedAt: string
+}
+
+/** 轉成可排序的 ISO 字串;無法解析時回傳空字串。 */
+function toIsoDate(publishedAt: string): string {
+  const dt = new Date(publishedAt)
+  return Number.isNaN(dt.getTime()) ? '' : dt.toISOString()
 }
 
 function decodeEntity(raw: string): string {
@@ -129,7 +136,7 @@ export async function filterNewsByAI(candidates: NewsCandidate[]): Promise<Marke
   }))
 }
 
-/** 抓取候選新聞 → AI 過濾 → 寫入 DB。回傳儲存後的清單。 */
+/** 抓取候選新聞 → 保留近 2 天且依發布時間新到舊排序 → AI 過濾 → 寫入 DB。回傳儲存後的清單。 */
 export async function refreshMarketFocus(): Promise<MarketFocusItem[]> {
   const seen = new Set<string>()
   const candidates: NewsCandidate[] = []
@@ -141,7 +148,20 @@ export async function refreshMarketFocus(): Promise<MarketFocusItem[]> {
       candidates.push(c)
     }
   }
-  const items = await filterNewsByAI(candidates)
+
+  const now = Date.now()
+  const cutoff = now - RECENT_DAYS * 24 * 60 * 60 * 1000
+  const recent = candidates
+    .map((c) => ({ c, t: Date.parse(c.publishedAt) }))
+    .filter((x) => !Number.isNaN(x.t) && x.t >= cutoff)
+    .sort((a, b) => b.t - a.t)
+    .map((x) => x.c)
+
+  const items = (await filterNewsByAI(recent))
+    .map((it) => ({ ...it, published_at: it.published_at ? toIsoDate(it.published_at) : '' }))
+    .sort((a, b) => b.published_at.localeCompare(a.published_at))
+    .slice(0, 6)
+
   await saveMarketFocus(items)
   return items
 }

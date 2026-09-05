@@ -1368,10 +1368,10 @@ export async function saveMarketFocus(items: MarketFocusItem[]): Promise<void> {
   }
 }
 
-/** 讀取最新一輪市場焦點新聞。 */
+/** 讀取最新一輪市場焦點新聞（以發布時間新到舊排序）。 */
 export async function getMarketFocus(limit: number = 6): Promise<MarketFocusItem[]> {
   return dbQueryAll<MarketFocusItem>(
-    `SELECT id, title, url, source, published_at, reason FROM market_focus ORDER BY id DESC LIMIT ${limit}`,
+    `SELECT id, title, url, source, published_at, reason FROM market_focus ORDER BY published_at DESC, id DESC LIMIT ${limit}`,
   )
 }
 

@@ -59,16 +59,6 @@ export default async function AboutPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-3">{d.featuresTitle}</h2>
-          <ul className="list-disc pl-5 space-y-2">
-            <li>{d.featureAi}</li>
-            <li>{d.featureOddLot}</li>
-            <li>{d.featurePortfolio}</li>
-            <li>{d.featureBacktest}</li>
-          </ul>
-        </section>
-
-        <section>
           <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-4">{d.startTitle}</h2>
           <div className="not-prose grid grid-cols-1 md:grid-cols-3 gap-4">
             {steps.map((s, i) => (
