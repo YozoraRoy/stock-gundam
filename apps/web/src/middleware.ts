@@ -40,18 +40,11 @@ export function middleware(req: NextRequest) {
 
   const resolved: Locale = locale ?? (cookie && isLocale(cookie) ? (cookie as Locale) : resolveFromAcceptLanguage(req.headers))
 
-  // 建構重寫後無前綴的路徑
+  // 建構重寫後無前綴的路徑（剝除開頭連續的語系前綴，避免疊加如 /ja/ja/en/... 導致 404）
   let nextPathname = pathname
-  for (const p of pathLocales) {
-    if (pathname === `/${p}`) {
-      nextPathname = '/'
-      break
-    }
-    if (pathname.startsWith(`/${p}/`)) {
-      nextPathname = pathname.slice(p.length + 1)
-      break
-    }
-  }
+  let prefixCount = 0
+  while (prefixCount < segments.length && (pathLocales as readonly string[]).includes(segments[prefixCount])) prefixCount++
+  if (prefixCount > 0) nextPathname = prefixCount === segments.length ? '/' : `/${segments.slice(prefixCount).join('/')}`
 
   // 設定 x-locale header，讓後端以 resolved 語系渲染
   const requestHeaders = new Headers(req.headers)
